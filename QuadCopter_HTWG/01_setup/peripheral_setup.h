@@ -86,6 +86,16 @@
 	#define periph_DEBUG_UART_BASE 				UART0_BASE
 
 #endif
+
+//
+// New implementation USB Debug Peripherals TODO check if correct edit comment
+#if( setup_DEBUG_USB == (setup_DEBUG&setup_MASK_OPT1) )
+
+    #define periph_DEBUG_USB_BASE              USB0_BASE
+
+#endif
+
+
 #if( setup_DEV_DEBUG_PINS )
 
 	#define periph_DEBUG_PIN1 					(GPIO_PORTA_BASE | GPIO_PIN_2)

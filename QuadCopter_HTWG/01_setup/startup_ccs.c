@@ -60,7 +60,6 @@ extern uint32_t __STACK_TOP;
 // External declarations for the interrupt handlers used by the application.
 //
 //*****************************************************************************
-
 extern void xPortPendSVHandler(void);
 extern void vPortSVCHandler(void);
 extern void xPortSysTickHandler(void);
@@ -81,6 +80,7 @@ extern void Dma_ErrorISR(void);
 #define HANDLER_I2C3_MASTER_AND_Slave		IntDefaultHandler
 #define HANDLER_GPIO_PORT_D					IntDefaultHandler
 #define HANDLER_TIMER2_A                    IntDefaultHandler
+#define HANDLER_USB0                        IntDefaultHandler
 
 //
 //  Motor ISRs
@@ -130,6 +130,13 @@ extern void Dma_ErrorISR(void);
 	#undef   HANDLER_TIMER2_A
 	#define  HANDLER_TIMER2_A                   Workload_TimeSampelIntHandler
 #endif
+
+#if ( setup_DEBUG_USB == (setup_DEBUG&setup_MASK_OPT1))
+	extern void USB0DeviceIntHandler(void);
+    #undef  HANDLER_USB0
+    #define HANDLER_USB0                        USB0DeviceIntHandler
+#endif
+
 
 //*****************************************************************************
 //
@@ -202,7 +209,7 @@ void (* const g_pfnVectors[])(void) =
     0,                                      // Reserved
     0,                                      // Reserved
     IntDefaultHandler,                      // Hibernate
-    IntDefaultHandler,                      // USB0
+    HANDLER_USB0,                      // USB0
     IntDefaultHandler,                      // PWM Generator 3
 	IntDefaultHandler,                      // uDMA Software Transfer
 	Dma_ErrorISR,                      // uDMA Error

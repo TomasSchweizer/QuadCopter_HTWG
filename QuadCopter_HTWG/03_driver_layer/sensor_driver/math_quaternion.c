@@ -21,6 +21,18 @@
 // Functions
 //*****************************************************************************
 
+/*
+ * increment the given value by one but reset on given limit
+ * eg: limit is 5 then value ranges from 0...4
+ */
+uint32_t increment(uint32_t value, uint32_t limit) {
+    value++;
+    value = (value == limit) ? 0 : value;
+
+    return value;
+}
+
+
 
 struct quat quatFromVectors(prec_t *vectA, prec_t *vectB){
 	/*

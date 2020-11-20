@@ -15,12 +15,25 @@
 
 //  Hardware Specific
 #include "inc/hw_memmap.h"
+
+#include "driverlib/usb.h"
 #include "driverlib/gpio.h"
 #include "driverlib/pin_map.h"
 #include "driverlib/uart.h"
 #include "driverlib/sysctl.h"
 #include "driverlib/rom.h"
+#include "driverlib/usb.h"
 #include "utils/uartstdio.h"
+// TODO USB new includes test
+
+// USBlib
+#include "usblib/usblib.h"
+#include "usblib/usb-ids.h"
+#include "usblib/device/usbdevice.h"
+#include "usblib/device/usbdbulk.h"
+//structs for bulk transfer
+#include "usb_bulk_structs.h"
+#include "utils/ustdlib.h"
 
 // setup
 #include "qc_setup.h"
@@ -28,6 +41,8 @@
 
 // drivers
 #include "debug_interface.h"
+#include "math_quaternion.h"
+
 
 /* ------------------------------------------------------------ */
 /*				Select the Mode									*/
@@ -117,8 +132,286 @@
 //	    }
 	}
 
+// new implementation fo USB Debug TODO implement test comment
 #elif ( setup_DEBUG_USB == (setup_DEBUG&setup_MASK_OPT1) )
-	#error ERROR: define setup_DEBUG (in qc_setup.h)
+
+
+    /* ------------------------------------------------------------ */
+    /*              Local Defines                                   */
+    /* ------------------------------------------------------------ */
+
+    #if (USB0_BASE == periph_DEBUG_USB_BASE)
+	    #define TRACE_SYSCTL_PERIPH_GPIO    SYSCTL_PERIPH_GPIOD
+        #define TRACE_GPIO_PORT_BASE        GPIO_PORTD_BASE
+        #define TRACE_GPIO_PINS_USB_ANALOG   (GPIO_PIN_4 | GPIO_PIN_5)
+    #else
+        #error ERROR: define setup_DEBUG (in qc_setup.h)
+    #endif
+
+	static bool b_USBDeviceConnected = false;
+	static volatile ui32_TXTransmitCounter = 0;
+
+	/* ------------------------------------------------------------ */
+    /*              Procedure Definitions                           */
+    /* ------------------------------------------------------------ */
+
+    /**
+     * \brief   Init peripheral for USB debug interface in Bulk transfer mode
+     * \note    to enable this HIDE function define setup_DEBUG in qc_setup.h
+     */
+	void HIDE_Debug_USB_InterfaceInit(void)
+	{
+	    // Enable the GPIO peripheral used for USB, and configure the USB pins.
+        SysCtlPeripheralEnable(TRACE_SYSCTL_PERIPH_GPIO);
+        GPIOPinTypeUSBAnalog(TRACE_GPIO_PORT_BASE, TRACE_GPIO_PINS_USB_ANALOG);
+
+        // Initialize the transmit and receive buffers.
+        USBBufferInit(&g_sTxBuffer);
+        USBBufferInit(&g_sRxBuffer);
+
+        // Set the USB stack mode to Device mode with VBUS monitoring.
+        USBStackModeSet(0, eUSBModeForceDevice, 0);
+
+        // Pass our device information to the USB library and place the device on the bus.
+        USBDBulkInit(0, &g_sBulkDevice);
+
+	}
+
+	//*****************************************************************************
+	    //
+	    // Function to send data over USB to PC application
+	    //
+	    // \param pv_txBuffer is the a void pointer to the array of data which should be send
+	    // \param ui32_count is the lenght/ size of the data
+	    // \param ui8_txDataType is type of data which is send
+	    //
+	    //
+	//*****************************************************************************
+	void HIDE_Debug_USB_InterfaceSend(void* pv_txBuffer, uint32_t ui32_count, uint8_t ui8_txDataType){
+
+	    tUSBRingBufObject sTxRing;
+	    uint8_t ui8_txArraySend[49];
+	    uint32_t ui32_WriteIndex;
+
+	    uint8_t index_n, index_m, index_k;
+	    int j, k, n, m;
+
+	    if(b_USBDeviceConnected){
+
+
+
+	        // first byte is a indicator which datatype was send
+            k = 0;
+            ui8_txArraySend[k] = ui8_txDataType;
+            k++;
+
+
+
+
+            switch(ui8_txDataType){
+
+            // Values to send are uint16
+            case 1: // UINT16
+
+                index_n = 24; // 24 uint16 values
+                index_m = 2;  // 2 uint8 values
+                index_k = 49; // max 49 bytes
+
+                i16_ui8_union i16_ui8_array[24];
+
+                // fill array with the values given to the function
+                for(j= 0; j < index_n; j++){
+
+                if (j < ui32_count){
+                    i16_ui8_array[j].int16 = *((uint16_t*)pv_txBuffer + j);
+                } else {
+                    i16_ui8_array[j].int16 = 0;
+                }
+                }
+
+
+                // fill the send array with uint8 data
+                for(n = 0; n < index_n; n++){
+                    for(m = 0; m < index_m; m++){
+
+                        ui8_txArraySend[k] = i16_ui8_array[n].uint8[m];
+
+                        if(k >= index_k){
+                            k = 0;
+                        } else{
+                            k++;
+                        }
+
+                    }
+                }
+                break;
+
+            // values to send are floats
+            case 2: // FLOAT
+
+                index_n = 12; // 12 float values
+                index_m = 4;  // 4 uint8 values
+                index_k = 49; // max 49 bytes
+
+                f_ui8_union f_ui8_array[12];
+
+                // fill array with the values given to the function
+                for(j= 0; j < index_n; j++){
+
+                    if (j < ui32_count){
+                        f_ui8_array[j].f = *((float*)pv_txBuffer + j);
+                    } else {
+                        f_ui8_array[j].f = 0.0f;
+                    }
+                }
+
+                // fill the send array with uint8 data
+                for(n = 0; n < index_n; n++){
+                        for(m = 0; m < index_m; m++){
+
+                            ui8_txArraySend[k] = f_ui8_array[n].uint8[m];
+
+                            if(k >= index_k){
+                                k = 0;
+                            } else{
+                                k++;
+                            }
+
+                        }
+                }
+                break;
+            }
+	    }
+
+
+	    // flush the buffer so no faulty bytes are there
+	    USBBufferFlush(&g_sTxBuffer);
+
+	    // set the write index
+	    USBBufferInfoGet(&g_sTxBuffer, &sTxRing);
+	    ui32_WriteIndex = sTxRing.ui32WriteIndex;
+
+	    // fill the TX buffer with data and increment the write index after every byte
+	    int i;
+	    for(i = 0; i < sizeof(ui8_txArraySend); i++){
+	       g_pui8USBTxBuffer[ui32_WriteIndex] = ui8_txArraySend[i];
+	       ui32_WriteIndex = increment(ui32_WriteIndex, BULK_BUFFER_SIZE);
+	    }
+
+	    // indicates that the client has written data in the transmit buffer and wants to transmit it
+	    USBBufferDataWritten(&g_sTxBuffer, sizeof(ui8_txArraySend));
+
+
+
+
+	}
+
+	//*****************************************************************************
+	//
+	// Handles bulk driver notifications related to the transmit channel (data to
+	// the USB host).
+	//
+	// \param pvCBData is the client-supplied callback pointer for this channel.
+	// \param ui32Event identifies the event we are being notified about.
+	// \param ui32MsgValue is an event-specific value.
+	// \param pvMsgData is an event-specific pointer.
+	//
+	// This function is called by the bulk driver to notify us of any events
+	// related to operation of the transmit data channel (the IN channel carrying
+	// data to the USB host).
+	//
+	// \return The return value is event-specific.
+	//
+	//*****************************************************************************
+	uint32_t TxHandler(void *pvCBData, uint32_t ui32Event, uint32_t ui32MsgValue,
+	          void *pvMsgData)
+	{
+	    return(0);
+	}
+
+	//*****************************************************************************
+	//
+	// Handles bulk driver notifications related to the receive channel (data from
+	// the USB host).
+	//
+	// \param pvCBData is the client-supplied callback pointer for this channel.
+	// \param ui32Event identifies the event we are being notified about.
+	// \param ui32MsgValue is an event-specific value.
+	// \param pvMsgData is an event-specific pointer.
+	//
+	// This function is called by the bulk driver to notify us of any events
+	// related to operation of the receive data channel (the OUT channel carrying
+	// data from the USB host).
+	//
+	// \return The return value is event-specific.
+	//
+	//*****************************************************************************
+	uint32_t RxHandler(void *pvCBData, uint32_t ui32Event,
+	               uint32_t ui32MsgValue, void *pvMsgData)
+	{
+	    //
+	    // Which event are we being sent?
+	    //
+	    switch(ui32Event)
+	    {
+	        //
+	        // We are connected to a host and communication is now possible.
+	        //
+	        case USB_EVENT_CONNECTED:
+	        {
+	            //
+	            // Flush our buffers.
+	            //
+	            USBBufferFlush(&g_sTxBuffer);
+	            USBBufferFlush(&g_sRxBuffer);
+
+	            b_USBDeviceConnected = true;
+
+	            break;
+	        }
+
+	        //
+	        // The host has disconnected.
+	        //
+	        case USB_EVENT_DISCONNECTED:
+	        {
+
+	            b_USBDeviceConnected = false;
+
+	            break;
+	        }
+
+	        //
+	        // A new packet has been received.
+	        //
+	        case USB_EVENT_RX_AVAILABLE:
+	        {
+
+	        }
+
+	        //
+	        // Ignore SUSPEND and RESUME for now.
+	        //
+	        case USB_EVENT_SUSPEND:
+	        case USB_EVENT_RESUME:
+	        {
+	            break;
+	        }
+
+	        //
+	        // Ignore all other events and return 0.
+	        //
+	        default:
+	        {
+	            break;
+	        }
+	    }
+
+	    return(0);
+	}
+
+
+
 #elif ( setup_DEBUG_NONE == (setup_DEBUG&setup_MASK_OPT1) )
 #else
 	#error ERROR: define setup_DEBUG (in qc_setup.h)

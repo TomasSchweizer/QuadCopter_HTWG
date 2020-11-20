@@ -35,6 +35,10 @@
 #define debug_CLEAR					0x00
 #define debug_SET					0xFF
 
+#define debug_INT16                 1
+#define debug_FLOAT                 2
+
+
 /* ------------------------------------------------------------ */
 /*				   Type Definitions			    				*/
 /* ------------------------------------------------------------ */
@@ -47,6 +51,23 @@ union {
 	char c[4];	/**< the char array number */
 } f2c_u;
 
+#if ( setup_DEBUG_USB == (setup_DEBUG&setup_MASK_OPT1) )
+
+    typedef union f_ui8 {
+
+        float f;
+        uint8_t uint8[4];
+
+    }f_ui8_union;
+
+    typedef union ui16_ui8 {
+
+        int16_t int16;
+        uint8_t uint8[2];
+
+    }i16_ui8_union;
+
+#endif
 /* ------------------------------------------------------------ */
 /*					Variable Declarations						*/
 /* ------------------------------------------------------------ */
@@ -55,7 +76,7 @@ union {
 /*					Procedure Declarations						*/
 /* ------------------------------------------------------------ */
 
-#if	( setup_DEBUG_NONE != (setup_DEBUG&setup_MASK_OPT1) ) || DOXYGEN
+#if	( setup_DEBUG_UART == (setup_DEBUG&setup_MASK_OPT1) ) || DOXYGEN
 
 	extern void HIDE_Debug_InterfaceInit(void);
 	extern void HIDE_Debug_InterfaceGet(int32_t* i32_buff);
@@ -68,6 +89,24 @@ union {
 	#define HIDE_Debug_InterfaceSend(pui8Buffer,ui32Count)	// this define will be kicked off from the preprocessor
 
 #endif
+
+// TODO new implementation of USB test and comment
+#if	( setup_DEBUG_USB == (setup_DEBUG&setup_MASK_OPT1) ) || DOXYGEN
+
+	extern void HIDE_Debug_USB_InterfaceInit(void);
+	extern void HIDE_Debug_USB_InterfaceSend(void* pv_txBuffer, uint32_t ui32_count, uint8_t ui8_txDataType);
+	extern uint32_t TxHandler(void *pvCBData, uint32_t ui32Event, uint32_t ui32MsgValue, void *pvMsgData);
+	extern uint32_t RxHandler(void *pvCBData, uint32_t ui32Event, uint32_t ui32MsgValue, void *pvMsgData);
+
+#else
+
+    #define HIDE_Debug_USB_InterfaceInit()                                          // this define will be kicked off from the preprocessor
+    #define HIDE_Debug_USB_InterfaceSend(pv_txBuffer, ui32_count, ui8_txDataType)   // this define will be kicked off from the preprocessor
+    #define TxHandler(pvCBData, ui32Event, ui32MsgValue, pvMsgData);
+    #define RxHandler(pvCBData, ui32Event, ui32MsgValue, pvMsgData);                // this define will be kicked off from the preprocessor
+
+#endif
+
 
 #if	( setup_DEV_DEBUG_PINS ) || DOXYGEN
 

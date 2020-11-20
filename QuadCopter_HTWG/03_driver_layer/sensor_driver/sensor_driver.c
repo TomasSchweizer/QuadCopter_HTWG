@@ -68,6 +68,7 @@
 #define CALIBRATE_START						0
 #define IS_CALIBRAE_REQUIRED(stateTime)		(stateTime>=0)
 
+
 /* ------------------------------------------------------------ */
 /*				Forward Declarations							*/
 /* ------------------------------------------------------------ */
@@ -76,7 +77,7 @@
 /*				Global Variables								*/
 /* ------------------------------------------------------------ */
 
-int16_t gi16_sensor_data[3];
+int16_t gi16_sensor_data[9];
 float gf_sensor_fusedAngles[3];
 
 
@@ -89,6 +90,8 @@ struct lp_a_struct lp_offsets = {
 		.alpha = LP_FREQ2ALPHA(0.3f, dt)
 };
 static int32_t i32_stateTime=CALIBRATE_BEFORE_FIRST_START;
+
+
 /* ------------------------------------------------------------ */
 /*				Procedure Definitions							*/
 /* ------------------------------------------------------------ */
@@ -110,8 +113,6 @@ void Sensor_DrawDisplay(void)
 
 
 }
-
-
 
 static void correctOffset(float* sensor_data,uint8_t calibrate){
 	/*
@@ -413,9 +414,25 @@ static void correctOffset(float* sensor_data,uint8_t calibrate){
 		sensor_data[Y_GYRO]		= (float)s_rawData.y_gyro;
 		sensor_data[Z_GYRO]		= (float)s_rawData.z_gyro;
 
-		sensor_data[X_MAGNET]     = (float)s_rawData.x_magnet;
-		sensor_data[Y_MAGNET]     = (float)s_rawData.y_magnet;
-		sensor_data[Z_MAGNET]     = (float)s_rawData.z_magnet;
+		sensor_data[X_MAGNET]   = (float)s_rawData.x_magnet;
+		sensor_data[Y_MAGNET]   = (float)s_rawData.y_magnet;
+		sensor_data[Z_MAGNET]    = (float)s_rawData.z_magnet;
+	}
+
+	static void i2cCopyMPUData(int16_t sensor_data[]){
+
+
+            sensor_data[X_ACCEL]    = s_rawData.x_accel;
+            sensor_data[Y_ACCEL]    = s_rawData.y_accel;
+            sensor_data[Z_ACCEL]    = s_rawData.z_accel;
+            sensor_data[X_GYRO]     = s_rawData.x_gyro;
+            sensor_data[Y_GYRO]     = s_rawData.y_gyro;
+            sensor_data[Z_GYRO]     = s_rawData.z_gyro;
+
+            sensor_data[X_MAGNET]   = s_rawData.x_magnet;
+            sensor_data[Y_MAGNET]   = s_rawData.y_magnet;
+            sensor_data[Z_MAGNET]   = s_rawData.z_magnet;
+
 
 	}
 
@@ -517,6 +534,7 @@ static void correctOffset(float* sensor_data,uint8_t calibrate){
 		i2cGetMpuData(sensor_data);
 
 
+
 		// compensate out the offset
 		correctOffset(sensor_data,1);
 
@@ -540,6 +558,7 @@ static void correctOffset(float* sensor_data,uint8_t calibrate){
 		float sensor_data[9];
 
 		i2cGetMpuData(sensor_data);
+		i2cCopyMPUData(gi16_sensor_data);
 
 		// compensate out the offset
 		correctOffset(sensor_data,0);
@@ -625,3 +644,17 @@ uint8_t Sensor_IsCalibrateRequired(void)
 {
 	return IS_CALIBRAE_REQUIRED(i32_stateTime);
 }
+
+
+
+
+#if (setup_DEV_DEBUG_USB)
+    /**
+     * \brief   send data of Sensor over USB to PC application
+     */
+    void HIDE_Sensor_SendDataOverUSB(void)
+    {
+        HIDE_Debug_USB_InterfaceSend(gi16_sensor_data, sizeof(gi16_sensor_data)/ sizeof(gi16_sensor_data[0]), debug_INT16);
+
+    }
+#endif

@@ -21,6 +21,7 @@
 // drivers
 #include "debug_interface.h"
 #include "display_driver.h"
+#include "sensor_driver.h"
 
 // application
 #include "command_task.h"
@@ -97,6 +98,8 @@ static void UpdateStuff(void* p_parameter)
 {
 	HIDE_Display_Redraw();
 	HIDE_Control_DebugGetPid();
+	HIDE_Sensor_SendDataOverUSB();
+
 	// TODO insert USB HIDE_FUnction
 }
 
@@ -123,12 +126,17 @@ uint32_t CommandTask_Init(void)
 {
 	HIDE_Display_Init();
 	HIDE_Debug_InterfaceInit();
+	HIDE_Debug_USB_InterfaceInit();
+	// TODO add HIDE_Debug_USB_Interface
 
 	#if ( setup_DEV_DISPLAY )
 		HIDE_Display_InsertDrawFun(HIDE_Workload_DrawDisplay);
 		HIDE_Display_InsertDrawFun(HIDE_Fault_DrawDisplay);
 		HIDE_Display_InsertDrawFun(HIDE_Receive_DrawDisplay);
 	#endif
+
+//	if ( setup_DEV_DEBUG_USB)
+//	    HIDE_
 
 	//
 	// Create a timer, which inserts every x ms a UpdateFunktion into the Command Queue

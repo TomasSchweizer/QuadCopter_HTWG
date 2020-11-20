@@ -30,6 +30,7 @@
 	#define setup_DEV_DISPLAY			( 1 )					// show workloads, sumFaults, sumReceivs on Display (but only when the desired setup_DEV=1)
 	#define setup_DEV_PID_TUNE			( 1 )					// read debug interface for PID values (this can crash with write commands on the trace interface)
 	#define setup_DEV_DEBUG_PINS		( 1 )					// enable debug pins
+    #define setup_DEV_DEBUG_USB         ( 1 )                   // enable debug options over USB
 	#define setup_DEV_COMMANDS			( 0 )					// enable HIDE-function macros to insert into the command Queue Task
 
 #endif
@@ -56,7 +57,7 @@
 #define setup_REMOTE_SIMULATE			( 0x00000003 )			// remote control get funktions will output const values and every x ms a receiver eventBit will be fired
 #define setup_REMOTE_RIGHT_HAND			( 0x00000100 )			// throttle on right hand
 #define setup_REMOTE_LEFT_HAND			( 0x00000200 )			// throttle on left hand
-#define setup_REMOTE      				( setup_REMODE_CPPM | setup_REMOTE_LEFT_HAND )
+#define setup_REMOTE      				( setup_REMODE_CPPM | setup_REMOTE_LEFT_HAND ) // TODO check why its working with right hand remote controll
 
 // Select the Mode for the sensor (others will be exclude from build)
 #define setup_SENSOR_NONE  				( 0x00000001 )			// all sensor functions will do nothing
@@ -77,7 +78,7 @@
 // Select the Mode for the debug interface (others will be exclude from build, & all debug functions use HIDE!)
 #define setup_DEBUG_NONE  				( 0x00000001 )					// all debug interface functions will do nothing and consume no memmory (HIDE)
 #define setup_DEBUG_UART  				( 0x00000002 )					// tested
-#define setup_DEBUG_USB  				( 0x00000003 )					// not implemented
-#define setup_DEBUG      				( setup_DEBUG_UART )
+#define setup_DEBUG_USB  				( 0x00000003 )					// not implemented TODO implement and change
+#define setup_DEBUG      				( setup_DEBUG_USB )
 
 #endif // __QC_SETUP_H__
