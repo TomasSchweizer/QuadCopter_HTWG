@@ -38,6 +38,13 @@ Debug
 dvt
 
 #Python and Pycharm
+
+
+# IDE 
+.idea
+venv
+
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
