@@ -48,7 +48,7 @@
 /*				Select the Mode									*/
 /* ------------------------------------------------------------ */
 
-#if	( setup_DEBUG_UART == (setup_DEBUG&setup_MASK_OPT1) ) || DOXYGEN
+#if	( (setup_DEBUG_UART == (setup_DEBUG&setup_MASK_OPT1)) || (setup_DEBUG_UART_USB == (setup_DEBUG&setup_MASK_OPT1)) ) || DOXYGEN
 
 	/* ------------------------------------------------------------ */
 	/*				Local Defines									*/
@@ -131,9 +131,9 @@
 	        }
 //	    }
 	}
-
+#endif
 // new implementation fo USB Debug TODO implement test comment
-#elif ( setup_DEBUG_USB == (setup_DEBUG&setup_MASK_OPT1) )
+#if ( (setup_DEBUG_USB == (setup_DEBUG&setup_MASK_OPT1)) || (setup_DEBUG_UART_USB == (setup_DEBUG&setup_MASK_OPT1)) )
 
 
     /* ------------------------------------------------------------ */
@@ -141,15 +141,15 @@
     /* ------------------------------------------------------------ */
 
     #if (USB0_BASE == periph_DEBUG_USB_BASE)
-	    #define TRACE_SYSCTL_PERIPH_GPIO    SYSCTL_PERIPH_GPIOD
-        #define TRACE_GPIO_PORT_BASE        GPIO_PORTD_BASE
+	    #define TRACE_SYSCTL_PERIPH_GPIO_USB    SYSCTL_PERIPH_GPIOD
+        #define TRACE_GPIO_PORT_BASE_USB        GPIO_PORTD_BASE
         #define TRACE_GPIO_PINS_USB_ANALOG   (GPIO_PIN_4 | GPIO_PIN_5)
     #else
         #error ERROR: define setup_DEBUG (in qc_setup.h)
     #endif
 
 	static bool b_USBDeviceConnected = false;
-	static volatile ui32_TXTransmitCounter = 0;
+	//static volatile ui32_TXTransmitCounter = 0;
 
 	/* ------------------------------------------------------------ */
     /*              Procedure Definitions                           */
@@ -162,8 +162,8 @@
 	void HIDE_Debug_USB_InterfaceInit(void)
 	{
 	    // Enable the GPIO peripheral used for USB, and configure the USB pins.
-        SysCtlPeripheralEnable(TRACE_SYSCTL_PERIPH_GPIO);
-        GPIOPinTypeUSBAnalog(TRACE_GPIO_PORT_BASE, TRACE_GPIO_PINS_USB_ANALOG);
+        SysCtlPeripheralEnable(TRACE_SYSCTL_PERIPH_GPIO_USB);
+        GPIOPinTypeUSBAnalog(TRACE_GPIO_PORT_BASE_USB, TRACE_GPIO_PINS_USB_ANALOG);
 
         // Initialize the transmit and receive buffers.
         USBBufferInit(&g_sTxBuffer);
@@ -410,12 +410,13 @@
 	    return(0);
 	}
 
-
-
-#elif ( setup_DEBUG_NONE == (setup_DEBUG&setup_MASK_OPT1) )
-#else
-	#error ERROR: define setup_DEBUG (in qc_setup.h)
 #endif
+
+#if ( setup_DEBUG_NONE == (setup_DEBUG&setup_MASK_OPT1) )
+#endif
+
+//	#error ERROR: define setup_DEBUG (in qc_setup.h)
+//#endif
 
 #if	( setup_DEV_DEBUG_PINS ) || DOXYGEN
 

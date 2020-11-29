@@ -334,10 +334,19 @@ static void StateLanding(EventBits_t x_faultEventBits)
  */
 static void StateResting(void)
 {
-	if(Sensor_IsCalibrateRequired())
-		Sensor_Calibrate(TASK_PERIOD_MS);
-	else
-		Sensor_ReadAndFusion();
+    // TODO check if added part in if works
+    if(Sensor_IsCalibrateRequired()){
+
+       Sensor_Calibrate(TASK_PERIOD_MS);
+
+       if(Sensor_IsCalibrateReady()){
+           Sensor_CalibrateStop();
+       }
+    }
+
+    else
+        Sensor_ReadAndFusion();
+
 	Motor_StopAll();
 }
 

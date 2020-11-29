@@ -51,7 +51,7 @@ union {
 	char c[4];	/**< the char array number */
 } f2c_u;
 
-#if ( setup_DEBUG_USB == (setup_DEBUG&setup_MASK_OPT1) )
+#if ( (setup_DEBUG_USB == (setup_DEBUG&setup_MASK_OPT1))  || (setup_DEBUG_UART_USB == (setup_DEBUG&setup_MASK_OPT1)) )
 
     typedef union f_ui8 {
 
@@ -76,7 +76,7 @@ union {
 /*					Procedure Declarations						*/
 /* ------------------------------------------------------------ */
 
-#if	( setup_DEBUG_UART == (setup_DEBUG&setup_MASK_OPT1) ) || DOXYGEN
+#if	( (setup_DEBUG_UART == (setup_DEBUG&setup_MASK_OPT1)) || (setup_DEBUG_UART_USB == (setup_DEBUG&setup_MASK_OPT1)) ) || DOXYGEN
 
 	extern void HIDE_Debug_InterfaceInit(void);
 	extern void HIDE_Debug_InterfaceGet(int32_t* i32_buff);
@@ -91,7 +91,7 @@ union {
 #endif
 
 // TODO new implementation of USB test and comment
-#if	( setup_DEBUG_USB == (setup_DEBUG&setup_MASK_OPT1) ) || DOXYGEN
+#if	( (setup_DEBUG_USB == (setup_DEBUG&setup_MASK_OPT1)) || (setup_DEBUG_UART_USB == (setup_DEBUG&setup_MASK_OPT1)) ) || DOXYGEN
 
 	extern void HIDE_Debug_USB_InterfaceInit(void);
 	extern void HIDE_Debug_USB_InterfaceSend(void* pv_txBuffer, uint32_t ui32_count, uint8_t ui8_txDataType);

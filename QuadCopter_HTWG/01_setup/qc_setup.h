@@ -79,6 +79,7 @@
 #define setup_DEBUG_NONE  				( 0x00000001 )					// all debug interface functions will do nothing and consume no memmory (HIDE)
 #define setup_DEBUG_UART  				( 0x00000002 )					// tested
 #define setup_DEBUG_USB  				( 0x00000003 )					// not implemented TODO implement and change
-#define setup_DEBUG      				( setup_DEBUG_USB )
+#define setup_DEBUG_UART_USB            ( 0x00000004 )                  // TODO test to implememt UART and USB at the same time
+#define setup_DEBUG      				( setup_DEBUG_UART_USB )
 
 #endif // __QC_SETUP_H__

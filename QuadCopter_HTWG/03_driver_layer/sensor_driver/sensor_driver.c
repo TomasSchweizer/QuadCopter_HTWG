@@ -2,7 +2,9 @@
  * 		@file 	sensor_driver.c
  * 		@brief	functions to interact with the 9-Axis Gyro+Accel+Magn sensor
  *//*	@author Tobias Grimm
- * 		@date 	31.05.2016	(last modified)
+ *//*
+ *//*	@modifier Tomas Schweizer
+ * 		@date 	24.11.2020	(last modified)
  */
 
 /* ------------------------------------------------------------ */
@@ -11,6 +13,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+
 
 //  Hardware Specific
 #include "inc/hw_memmap.h"
@@ -38,10 +41,14 @@
 #include "workload.h"
 #include "fault.h"
 
+// TODO delete after test
+#include "math_quaternion.h"
+
 // FreeRTOS
 #include "FreeRTOS.h"
 #include "event_groups.h"
 #include "receiver_task.h"
+
 
 /* ------------------------------------------------------------ */
 /*				Local Defines									*/
@@ -77,7 +84,12 @@
 /*				Global Variables								*/
 /* ------------------------------------------------------------ */
 
+// TODO only test variable delete, change later
 int16_t gi16_sensor_data[9];
+float new_quaternion[4];
+float gf_sensor_data[9];
+
+
 float gf_sensor_fusedAngles[3];
 
 
@@ -128,7 +140,7 @@ static void correctOffset(float* sensor_data,uint8_t calibrate){
 		lp_offsets.x[2] = sensor_data[Z_ACCEL] - 16384.0f;
 		lp_offsets.x[3] = sensor_data[X_GYRO];
 		lp_offsets.x[4] = sensor_data[Y_GYRO];
-		lp_offsets.x[5] = sensor_data[Z_GYRO];
+
 		lowPassArray(&lp_offsets);
 
 	}
@@ -419,22 +431,40 @@ static void correctOffset(float* sensor_data,uint8_t calibrate){
 		sensor_data[Z_MAGNET]    = (float)s_rawData.z_magnet;
 	}
 
+	// TODO Only test functions to send data delete or change for final implementation
 	static void i2cCopyMPUData(int16_t sensor_data[]){
 
 
-            sensor_data[X_ACCEL]    = s_rawData.x_accel;
-            sensor_data[Y_ACCEL]    = s_rawData.y_accel;
-            sensor_data[Z_ACCEL]    = s_rawData.z_accel;
-            sensor_data[X_GYRO]     = s_rawData.x_gyro;
-            sensor_data[Y_GYRO]     = s_rawData.y_gyro;
-            sensor_data[Z_GYRO]     = s_rawData.z_gyro;
+        sensor_data[X_ACCEL]    = s_rawData.x_accel;
+        sensor_data[Y_ACCEL]    = s_rawData.y_accel;
+        sensor_data[Z_ACCEL]    = s_rawData.z_accel;
+        sensor_data[X_GYRO]     = s_rawData.x_gyro;
+        sensor_data[Y_GYRO]     = s_rawData.y_gyro;
+        sensor_data[Z_GYRO]     = s_rawData.z_gyro;
 
-            sensor_data[X_MAGNET]   = s_rawData.x_magnet;
-            sensor_data[Y_MAGNET]   = s_rawData.y_magnet;
-            sensor_data[Z_MAGNET]   = s_rawData.z_magnet;
+        sensor_data[X_MAGNET]   = s_rawData.x_magnet;
+        sensor_data[Y_MAGNET]   = s_rawData.y_magnet;
+        sensor_data[Z_MAGNET]   = s_rawData.z_magnet;
 
 
 	}
+	// TODO Only test functions to send data delete or change for final implementation
+	static void i2cCopyFloatMPUData(float* local_sensor_data){
+
+
+	    gf_sensor_data[X_ACCEL]    = local_sensor_data[X_ACCEL];
+	    gf_sensor_data[Y_ACCEL]    = local_sensor_data[Y_ACCEL];
+	    gf_sensor_data[Z_ACCEL]    = local_sensor_data[Z_ACCEL];
+	    gf_sensor_data[X_GYRO]     = local_sensor_data[X_GYRO];
+	    gf_sensor_data[Y_GYRO]     = local_sensor_data[Y_GYRO];
+	    gf_sensor_data[Z_GYRO]     = local_sensor_data[Z_GYRO];
+
+	    gf_sensor_data[X_MAGNET]   = local_sensor_data[X_MAGNET];
+	    gf_sensor_data[Y_MAGNET]   = local_sensor_data[Y_MAGNET];
+	    gf_sensor_data[Z_MAGNET]   = local_sensor_data[Z_MAGNET];
+
+
+	    }
 
 
 	/**
@@ -533,10 +563,11 @@ static void correctOffset(float* sensor_data,uint8_t calibrate){
 
 		i2cGetMpuData(sensor_data);
 
-
-
 		// compensate out the offset
 		correctOffset(sensor_data,1);
+
+		// TODO test to send data delete later
+		//i2cCopyFloatMPUData(sensor_data);
 
 		// perform sensor fusion
 		sensorFusion(sensor_data, gf_sensor_fusedAngles);
@@ -558,10 +589,24 @@ static void correctOffset(float* sensor_data,uint8_t calibrate){
 		float sensor_data[9];
 
 		i2cGetMpuData(sensor_data);
-		i2cCopyMPUData(gi16_sensor_data);
+
+		// TODO test to send data delete later
+		//i2cCopyMPUData(gi16_sensor_data);
 
 		// compensate out the offset
 		correctOffset(sensor_data,0);
+
+		// TODO test to send data delete later
+        //i2cCopyFloatMPUData(sensor_data);
+
+        //TODO test quaternion USB send
+        struct quat quat_transfer = fuseAccelAndGyro(sensor_data);
+        new_quaternion[0] = quat_transfer.w;
+        new_quaternion[1] = quat_transfer.x;
+        new_quaternion[2] = quat_transfer.y;
+        new_quaternion[3] = quat_transfer.z;
+
+
 
 		sensorFusion(sensor_data, gf_sensor_fusedAngles);
 	}
@@ -594,6 +639,7 @@ void Sensor_Calibrate(int32_t elapseTimeMS)
 {
 	if(IS_CALIBRAE_REQUIRED(i32_stateTime))
 	{
+
 		SensorCalibrate();
 		i32_stateTime+=elapseTimeMS;
 		if(i32_stateTime>=CALIBRATE_MIN_TIME_MS)
@@ -607,6 +653,8 @@ void Sensor_Calibrate(int32_t elapseTimeMS)
 void Sensor_CalibrateStop(void)
 {
 	i32_stateTime=CALIBRATE_STOP;
+    // TODO delete HIDE_Debug_InterfaceSend("C finished", strlen("C finished")+1 );
+
 }
 
 /**
@@ -642,7 +690,9 @@ uint8_t Sensor_IsCalibrateReady(void)
  */
 uint8_t Sensor_IsCalibrateRequired(void)
 {
+
 	return IS_CALIBRAE_REQUIRED(i32_stateTime);
+
 }
 
 
@@ -654,7 +704,21 @@ uint8_t Sensor_IsCalibrateRequired(void)
      */
     void HIDE_Sensor_SendDataOverUSB(void)
     {
-        HIDE_Debug_USB_InterfaceSend(gi16_sensor_data, sizeof(gi16_sensor_data)/ sizeof(gi16_sensor_data[0]), debug_INT16);
+
+        // TODO program default USB data send if possible choosable in qc_setup.h and helper function for size of array
+        //float sensor_angles[3];
+
+        //sensor_angles[0] = math_RAD2DEC(gf_sensor_fusedAngles[0]);
+        //sensor_angles[1] = math_RAD2DEC(gf_sensor_fusedAngles[1]);
+        //sensor_angles[2] = math_RAD2DEC(gf_sensor_fusedAngles[1]);
+        //HIDE_Debug_USB_InterfaceSend(sensor_angles, sizeof(sensor_angles)/ sizeof(sensor_angles[0]), debug_FLOAT);
+
+
+
+        //HIDE_Debug_USB_InterfaceSend(gi16_sensor_data, sizeof(gi16_sensor_data)/ sizeof(gi16_sensor_data[0]), debug_INT16);
+        //HIDE_Debug_USB_InterfaceSend(gf_sensor_data, sizeof(gf_sensor_data)/ sizeof(gf_sensor_data[0]), debug_FLOAT);
+
+        HIDE_Debug_USB_InterfaceSend(new_quaternion, sizeof(new_quaternion)/sizeof(new_quaternion[0]), debug_FLOAT);
 
     }
 #endif

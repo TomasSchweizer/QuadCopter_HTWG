@@ -95,6 +95,13 @@
 
 #endif
 
+#if (setup_DEBUG_UART_USB == (setup_DEBUG&setup_MASK_OPT1) )
+
+    #define periph_DEBUG_UART_BASE             UART0_BASE
+    #define periph_DEBUG_USB_BASE              USB0_BASE
+
+#endif
+
 
 #if( setup_DEV_DEBUG_PINS )
 

@@ -131,7 +131,7 @@ extern void Dma_ErrorISR(void);
 	#define  HANDLER_TIMER2_A                   Workload_TimeSampelIntHandler
 #endif
 
-#if ( setup_DEBUG_USB == (setup_DEBUG&setup_MASK_OPT1))
+#if ( (setup_DEBUG_USB == (setup_DEBUG&setup_MASK_OPT1)) || (setup_DEBUG_UART_USB == (setup_DEBUG&setup_MASK_OPT1)))
 	extern void USB0DeviceIntHandler(void);
     #undef  HANDLER_USB0
     #define HANDLER_USB0                        USB0DeviceIntHandler
