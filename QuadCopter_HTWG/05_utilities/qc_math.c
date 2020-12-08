@@ -46,6 +46,21 @@ static void PidControllerCalcOutput(math_pidController_s *ps_pidC);
 /* ------------------------------------------------------------ */
 /*				Procedure Definitions							*/
 /* ------------------------------------------------------------ */
+/*
+ * increment the given value by one but reset on given limit
+ * eg: limit is 5 then value ranges from 0...4
+ */
+uint32_t increment2Limit(uint32_t value, uint32_t limit) {
+    value++;
+    value = (value == limit) ? 0 : value;
+
+    return value;
+}
+
+
+
+
+
 
 /**
  * \brief	calculate one time step for the desired PID Controller.

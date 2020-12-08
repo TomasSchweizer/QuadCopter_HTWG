@@ -41,6 +41,8 @@ class Wireframe:
         self.nodes = []
         self.edges = []
         self.faces = []
+        self.axes_nodes = []
+        self.axes = []
         self.quaternion = quat.Quaternion()
 
     # add all nodes to the wireframe
@@ -57,6 +59,16 @@ class Wireframe:
     def add_edges(self, edge_list, color_list):
         for index, color in zip(edge_list, color_list):
             self.edges.append(Edge(index, color))
+
+    # add all nodes to the block axes
+    def add_axes_nodes(self, node_list, color_list):
+        for node, color in zip(node_list, color_list):
+            self.axes_nodes.append(Node(node, color))
+
+    # add all block axes
+    def add_axes(self, axis_list, color_list):
+        for index, color in zip(axis_list, color_list):
+            self.axes.append(Face(index, color))
 
     # output all points of the Nodes
     def output_nodes(self):
@@ -81,6 +93,22 @@ class Wireframe:
             print("Edge %d:" % i)
             print("Color: (%d, %d, %d)" % (edge.color[0], edge.color[1], edge.color[2]))
             for node_index in edge.nodes_indices:
+                print("\tNode %d" % node_index)
+
+    # output all points of the Nodes for the axes
+    def output_axes_nodes(self):
+        print("\n --- Nodes Axes Block --- ")
+        for i, node in enumerate(self.nodes):
+            print(" %d: (%.2f, %.2f, %.2f) \t Color: (%d, %d, %d)" %
+                  (i, node.x, node.y, node.z, node.color[0], node.color[1], node.color[2]))
+
+    # output all axes and color
+    def output_axes(self):
+        print("\n --- Axes Block --- ")
+        for i, axis in enumerate(self.axes):
+            print("Axis %d:" % i)
+            print("Color: (%d, %d, %d)" % (axis.color[0], axis.color[1], axis.color[2]))
+            for node_index in axis.nodes_indices:
                 print("\tNode %d" % node_index)
 
     # calls quaternion rotat

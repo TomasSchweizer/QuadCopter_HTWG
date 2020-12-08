@@ -4,6 +4,7 @@ Program to give a 3d attitude of the IMU sensor, represented as a 3d cube
 
 import numpy as np
 import scipy.io
+import math
 
 import pygame as pg
 from pygame.locals import *
@@ -31,6 +32,14 @@ yaw_array = np.empty([])
 quat_array = np.empty([1, 1, 1, 1])
 samples_array = np.zeros([])
 
+# array for coordinate frame rotation
+rot_coordinate_frame = np.array([[-1.0, 0.0, 0.0, 0.0], [0.0, -1.0, 0.0, 0.0],
+                                 [0.0, 0.0, -1.0, 0.0], [0.0, 0.0, 0.0, 1.0]])
+inverse_y_rot = np.array([[1.0, 0.0, 0.0, 0.0], [0.0, -1.0, 0.0, 0.0],
+                            [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]])
+
+
+
 # Display 3D object on pygame Screen with PyOpenGl
 class View3D:
     def __init__(self, width, height, wireframe, reference_frame, usb_device):
@@ -47,20 +56,22 @@ class View3D:
         pg.font.init()
         self.myfont = pg.font.SysFont('Comic Sans MS', 30)
 
-
-        # Using depth test to make sure closer colors are shown over further ones
-        glEnable(GL_DEPTH_TEST)
-        glDepthFunc(GL_LESS)
-
-        # start view
+        # set view
+        glViewport(0, 0, width, height)
         glMatrixMode(GL_PROJECTION)
-        gluPerspective(45.0, (width / height), 0.1, 40.0)
-        glTranslatef(0.0, 0.0, -10.0)
+        glLoadIdentity()
+        gluPerspective(45, 1.0 * width / height, 0.1, 100.0)
+        glMatrixMode(GL_MODELVIEW)
+        glLoadIdentity()
 
-        # to rotate that earth frame is down delete to have sight from top
-        glRotated(-90.0, 1.0, 0.0, 0)
+        #init
+        glShadeModel(GL_SMOOTH)
+        glClearColor(0.0, 0.0, 0.0, 0.0)
+        glClearDepth(1.0)
+        glEnable(GL_DEPTH_TEST)
+        glDepthFunc(GL_LEQUAL)
+        glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST)
 
-        glScalef(-1.0, -1.0, 1.0)
 
     # Create the pygame screen until closed and main loop
     def run(self):
@@ -69,7 +80,7 @@ class View3D:
 
         while running:
             for event in pg.event.get():
-                if event.type == pg.QUIT:
+                if event.type == pg.QUIT or (event.type == KEYDOWN and event.key == K_ESCAPE):
                     # while closing save roll, pitch, yaw, quat data as matlab file
                     scipy.io.savemat('Quadcopter_Measurements.mat',
                                      dict(roll_array=roll_array, pitch_array=pitch_array,
@@ -78,20 +89,48 @@ class View3D:
                     running = False
                     quit()
 
-            data = np.array(self.usb_device.usb_read_data())
-            #print(data)
+            data = self.usb_device.usb_read_data()
+
             self.wireframe.quaternion.q = data
+            # inverse rotation around th y axis
+            self.wireframe.quaternion.q *= np.array([1.0, 1.0, -1.0, 1.0])
+            #print(data)
+
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
-            glMatrixMode(GL_MODELVIEW)
+            glLoadIdentity()
+            glTranslatef(0.0, 0.0, -10.0)
 
-            glLoadMatrixf(self.wireframe.rotation_mat())
+            self.drawText((-4.5, 2.5, 2), "Quadcopter 3D-Visualization", 18)
+            self.drawText((2.5, -2.5, 2), "Press Escape to exit.", 16)
 
+            roll, pitch, yaw = self.wireframe.get_attitude()
+
+            self.drawText((-4.5, -2.3, 2), "YAW: %f" % (yaw), 16)
+            self.drawText((-4.5, -2.5, 2), "PITCH: %f" % (pitch), 16)
+            self.drawText((-4.5, -2.7, 2), "ROLL: %f" % (roll), 16)
+
+            glPushMatrix()
+            glMultMatrixf(rot_coordinate_frame)
             self.display_reference_frame()
+            glPopMatrix()
+
+            glPushMatrix()
+            glMultMatrixf(self.wireframe.rotation_mat())
+            glMultMatrixf(rot_coordinate_frame)
             self.display_block()
+            glPopMatrix()
             self.save_values()
 
             pg.display.flip()
             pg.time.wait(10)
+
+    def drawText(self, position, text_string, size):
+        font = pg.font.SysFont("Courier", size, True)
+        text_surface = font.render(text_string, True, (255, 255, 255, 255), (0, 0, 0, 255))
+        textData = pg.image.tostring(text_surface, "RGBA", True)
+        glRasterPos3d(*position)
+        glDrawPixels(text_surface.get_width(), text_surface.get_height(), GL_RGBA, GL_UNSIGNED_BYTE, textData)
+
 
     # save roll, pitch, yaw and quaternion in numpy arrays
     def save_values(self):
@@ -99,18 +138,17 @@ class View3D:
         global roll_array, pitch_array, yaw_array, quat_array, samples_array
 
         yaw, pitch, roll = self.wireframe.get_attitude()
+
+        # TODO: ( test later in c code) find true north woth addition of declination
+
         quat = self.wireframe.quaternion.q
 
-        print(roll)
+
         roll_array = np.append(roll_array, roll)
         pitch_array = np.append(pitch_array, pitch)
         yaw_array = np.append(yaw_array, yaw)
 
-
-
         quat_array = np.append(quat_array, [quat])
-
-
         samples_array = np.append(samples_array, len(roll_array) - 1)
 
     # Draw block with PyOpenGl
@@ -143,6 +181,22 @@ class View3D:
 
                 glVertex3fv(node_vec)
         glEnd()
+
+
+        glBegin(GL_LINES)
+
+        for axis in self.wireframe.axes:
+
+            glColor3fv(axis.color)
+
+            for node_index in axis.nodes_indices:
+                node = self.wireframe.axes_nodes[node_index]
+                node_vec = (node.x, node.y, node.z)
+
+                glVertex3fv(node_vec)
+
+        glEnd()
+
 
     # draw reference frame with PyOpenGl
     def display_reference_frame(self):
@@ -200,6 +254,25 @@ def init_block():
     block.add_edges(block_edges, edges_colors)
     block.output_edges()
 
+    # create pointer of quadcopter
+    # create starting nodes/ colors of the reference frame
+    block_axes_nodes = [(4.0, 0.0, 0.0), (0.0, 0.0, 0.0), (4.0, 0.0, 0.0), (3.825, 0.125, 0.0), (4.0, 0.0, 0.0), (3.825, -0.125, 0.0),
+                             (0.0, 4.0, 0.0), (0.0, 0.0, 0.0), (0.0, 4.0, 0.0), (0.125, 3.825, 0.0), (0.0, 4.0, 0.0), (-0.125, 3.825, 0.0),
+                             (0.0, 0.0, 4.0), (0.0, 0.0, 0.0), (0.0, 0.0, 4.0), (0.0, 0.125, 3.825), (0.0, 0.0, 4.0), (0.0, -0.125, 3.825)]
+    axes_nodes_colors = [(255, 255, 255)] * len(block_axes_nodes)
+
+    # add and print all nodes to reference frame
+    block.add_axes_nodes(block_axes_nodes, axes_nodes_colors)
+    block.output_axes_nodes()
+
+    # create axes of the reference frame
+    block_axes = [(0, 1, 2, 3, 4, 5), (6, 7, 8, 9, 10, 11), (12, 13, 14, 15, 16, 17)]
+    axes_colors = [(255, 0, 0), (0, 0, 255), (100, 255, 100)]
+
+    # add and print all axes to reference frame
+    block.add_axes(block_axes, axes_colors)
+    block.output_axes()
+
     return block
 
 # init reference frame
@@ -208,8 +281,9 @@ def init_reference_frame():
     reference_frame = fr.ReferenceFrame()
 
     # create starting nodes/ colors of the reference frame
-    reference_frame_nodes = [ (-7.5, 0.0, 0.0), ( 7.5, 0.0, 0.0), ( 0.0,-7.5, 0.0),
-                              ( 0.0, 7.5, 0.0), ( 0.0, 0.0,-7.5), ( 0.0, 0.0, 7.5)]
+    reference_frame_nodes = [(-4.0, 0.0, 0.0), (4.0, 0.0, 0.0), (4.0, 0.0, 0.0), (3.825, 0.125, 0.0), (4.0, 0.0, 0.0), (3.825, -0.125, 0.0),
+                             (0.0, -4.0, 0.0), (0.0, 4.0, 0.0), (0.0, 4.0, 0.0), (0.125, 3.825, 0.0), (0.0, 4.0, 0.0), (-0.125, 3.825, 0.0),
+                             (0.0, 0.0, -4.0), (0.0, 0.0, 4.0), (0.0, 0.0, 4.0), (0.0, 0.125, 3.825), (0.0, 0.0, 4.0), (0.0, -0.125, 3.825)]
     rf_nodes_colors = [(255, 255, 255)] * len(reference_frame_nodes)
 
     # add and print all nodes to reference frame
@@ -217,8 +291,8 @@ def init_reference_frame():
     reference_frame.output_nodes()
 
     # create axes of the reference frame
-    reference_frame_axes = [(0, 1), (2, 3), (4, 5)]
-    rf_axes_colors = [(255, 255, 255)] * len(reference_frame_axes)
+    reference_frame_axes = [(0, 1, 2, 3, 4, 5), (6, 7, 8, 9, 10, 11), (12, 13, 14, 15, 16, 17)]
+    rf_axes_colors = [(255, 0, 0), (0, 0, 255), (0, 255, 0)]
 
     # add and print all axes to reference frame
     reference_frame.add_axes(reference_frame_axes, rf_axes_colors)

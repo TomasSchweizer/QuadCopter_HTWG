@@ -32,22 +32,22 @@
 #include "basic_filters.h"
 #include "sensor_fusion.h"
 #include "display_driver.h"
-#include "MadgwickAHRS.h"
 #include "debug_interface.h"
+#include "MadgwickAHRS.h"
 
 
 // utils
 #include "qc_math.h"
+#include "math_quaternion.h"
 #include "workload.h"
 #include "fault.h"
 
-// TODO delete after test
-#include "math_quaternion.h"
 
 // FreeRTOS
 #include "FreeRTOS.h"
 #include "event_groups.h"
 #include "receiver_task.h"
+
 
 
 /* ------------------------------------------------------------ */
@@ -57,6 +57,7 @@
 #define SENSOR_READ_TIMEOUT_MS		( 1 )
 
 #define dt 0.002f
+#define PI 3.14159265358979323846f
 
 #define X_ACCEL		0
 #define Y_ACCEL		1
@@ -69,7 +70,7 @@
 #define Z_MAGNET	8
 #define AXIS_COUNT	9
 
-#define CALIBRATE_MIN_TIME_MS				1000//###5000
+#define CALIBRATE_MIN_TIME_MS				5000//###5000
 #define CALIBRATE_BEFORE_FIRST_START		-2
 #define CALIBRATE_STOP						-1
 #define CALIBRATE_START						0
@@ -97,11 +98,23 @@ float gf_sensor_fusedAngles[3];
 /* ------------------------------------------------------------ */
 /*				Local Variables									*/
 /* ------------------------------------------------------------ */
+static int32_t i32_stateTime = CALIBRATE_BEFORE_FIRST_START;
 
+// struct for low pass filtering of acc and gyro data
 struct lp_a_struct lp_offsets = {
 		.alpha = LP_FREQ2ALPHA(0.3f, dt)
 };
-static int32_t i32_stateTime=CALIBRATE_BEFORE_FIRST_START;
+
+static float f_gyro_cal[3] = { 0.0, 0.0, 0.0};
+static float f_index = 0;
+
+
+// Magnetometer calibration data
+static float f_mag_calibration_b[3] = { -37.8932,   -3.4380,  -66.0203};
+static float f_mag_calibration_A[9] = { 1.0296,         0.0,         0.0,
+                                        0.0,    0.9850,         0.0,
+                                        0.0,         0.0,    0.9861};
+
 
 
 /* ------------------------------------------------------------ */
@@ -126,36 +139,119 @@ void Sensor_DrawDisplay(void)
 
 }
 
-static void correctOffset(float* sensor_data,uint8_t calibrate){
-	/*
-	 * corrects the offset from the sensor data
-	 */
 
-	// on init state first collect the qc data
-	if(calibrate == 1){
+// TODO check if it works/test: function to convert sensor axis to quadcopter axis
 
-		//calculate Sensor offsets
-		lp_offsets.x[0] = sensor_data[X_ACCEL];
-		lp_offsets.x[1] = sensor_data[Y_ACCEL];
-		lp_offsets.x[2] = sensor_data[Z_ACCEL] - 16384.0f;
-		lp_offsets.x[3] = sensor_data[X_GYRO];
-		lp_offsets.x[4] = sensor_data[Y_GYRO];
+static void IMUAxis2QCAxis(float* sensor_data){
 
-		lowPassArray(&lp_offsets);
+    sensor_data[X_ACCEL]    =   sensor_data[X_ACCEL];
+    sensor_data[Y_ACCEL]    =   -sensor_data[Y_ACCEL];
+    sensor_data[Z_ACCEL]    =   sensor_data[Z_ACCEL];
 
-	}
-	// if init state is over, apply the collected data
-	else{
-		// perform offset correction
-		sensor_data[X_ACCEL] -= lp_offsets.y[0];
-		sensor_data[Y_ACCEL] -= lp_offsets.y[1];
-		sensor_data[Z_ACCEL] -= lp_offsets.y[2];
-		sensor_data[X_GYRO]  -= lp_offsets.y[3];
-		sensor_data[Y_GYRO]  -= lp_offsets.y[4];
-		sensor_data[Z_GYRO]  -= lp_offsets.y[5];
-	}
+    // TODO Important for alining with OPENGL probably must be changed for controller
+    sensor_data[X_GYRO]     =   -sensor_data[X_GYRO];
+    sensor_data[Y_GYRO]     =   sensor_data[Y_GYRO];
+    sensor_data[Z_GYRO]     =   -sensor_data[Z_GYRO];
+
+    float temp = 0.0;
+
+    temp = sensor_data[X_MAGNET]; // save x_mag value for swap
+
+    sensor_data[X_MAGNET]   =   -sensor_data[Y_MAGNET]; // switch x and y axes of the magnetometer to correlate to the accel and gyro axes and inverse it (x axis points to front of quadcopter)
+    sensor_data[Y_MAGNET]   =   temp; // switch x and y axes of the magnetometer to correlate to the accel and gyro axes
+    sensor_data[Z_MAGNET]   =   sensor_data[Z_MAGNET];
+
+
 
 }
+
+static void convertIMUData(float* sensor_data){
+
+    // convert Acc LSB values to a_g multiple of earth acceleration [1g = 9,81m/s^2]
+    // Formula: a_g = (2 * a_lsb * sensitivity) / 2^16
+    sensor_data[X_ACCEL]    =   (2.0 * sensor_data[X_ACCEL] * 2.0) / 65520.0;
+    sensor_data[Y_ACCEL]    =   (2.0 * sensor_data[Y_ACCEL] * 2.0) / 65520.0;
+    sensor_data[Z_ACCEL]    =   (2.0 * sensor_data[Z_ACCEL] * 2.0) / 65520.0;
+
+    // Convert from Gyro LSB values to g_w angular velocity [°/s]
+    // Formula: g_w = (2 * w_lsb * sensitivity) / 2^16
+    sensor_data[X_GYRO]     =   (2.0 * sensor_data[X_GYRO] * 500.0) / 65520.0;
+    sensor_data[Y_GYRO]     =   (2.0 * sensor_data[Y_GYRO] * 500.0) / 65520.0;
+    sensor_data[Z_GYRO]     =   (2.0 * sensor_data[Z_GYRO] * 500.0) / 65520.0;
+
+    // Convert from degree to rad
+    sensor_data[X_GYRO]     =   sensor_data[X_GYRO] * PI / 180.0;
+    sensor_data[Y_GYRO]     =   sensor_data[Y_GYRO] * PI / 180.0;
+    sensor_data[Z_GYRO]     =   sensor_data[Z_GYRO] * PI / 180.0;
+
+
+    // Adjust Magnetometer by sensitivity values from manufacturer
+    // Formula: m_adj = m_raw * (((ASA_[x,y,z] - 128.0) * 0.5) / 128.0 + 1.0);
+    sensor_data[X_MAGNET]   =   sensor_data[X_MAGNET] * (((176.0 - 128.0) * 0.5) / 128.0 + 1.0);
+    sensor_data[Y_MAGNET]   =   sensor_data[Y_MAGNET] * (((178.0 - 128.0) * 0.5) / 128.0 + 1.0);
+    sensor_data[Z_MAGNET]   =   sensor_data[Z_MAGNET] * (((167.0 - 128.0) * 0.5) / 128.0 + 1.0);
+
+    // Convert Mag LSB values to magnetic flux [uT]
+    // Formula: g_w = (2 * w_lsb * sensitivity) / 2^16
+    sensor_data[X_MAGNET]   =   (2.0 * sensor_data[X_MAGNET] * 4900.0) / 65520.0;
+    sensor_data[Y_MAGNET]   =   (2.0 * sensor_data[Y_MAGNET] * 4900.0) / 65520.0;
+    sensor_data[Z_MAGNET]   =   (2.0 * sensor_data[Z_MAGNET] * 4900.0) / 65520.0;
+}
+
+
+// TODO own implementation of Offset always after senAxis2CXAxis
+static void correctIMUOffset(float* sensor_data,uint8_t calibrate){
+
+    // calibrate accelerometer statically for 5 secs
+
+    if (calibrate == 1){
+
+        //calculate Sensor offsets
+        lp_offsets.x[0] = sensor_data[X_ACCEL];
+        lp_offsets.x[1] = sensor_data[Y_ACCEL];
+        lp_offsets.x[2] = sensor_data[Z_ACCEL] - 1.0f;
+
+        lowPassArray(&lp_offsets);
+
+        f_gyro_cal[0] += sensor_data[X_GYRO];
+        f_gyro_cal[1] += sensor_data[Y_GYRO];
+        f_gyro_cal[2] += sensor_data[Z_GYRO];
+
+        f_index++;
+
+    }
+    else{
+
+        // perform offset correction
+        sensor_data[X_ACCEL]    -= lp_offsets.y[0];
+        sensor_data[Y_ACCEL]    -= lp_offsets.y[1];
+        sensor_data[Z_ACCEL]    -= lp_offsets.y[2];
+
+        if(f_index != 0.0){
+        sensor_data[X_GYRO]     -= f_gyro_cal[0] / f_index;
+        sensor_data[Y_GYRO]     -= f_gyro_cal[1] / f_index;
+        sensor_data[Z_GYRO]     -= f_gyro_cal[2] / f_index;
+        }
+
+        // reduce hard and soft iron biases
+        float x_mag_b0 = sensor_data[X_MAGNET] - f_mag_calibration_b[0];
+        float y_mag_b1 = sensor_data[Y_MAGNET] - f_mag_calibration_b[1];
+        float z_mag_b2 = sensor_data[Z_MAGNET] - f_mag_calibration_b[2];
+
+
+        sensor_data[X_MAGNET]   = (x_mag_b0 * f_mag_calibration_A[0]) +
+                                    (y_mag_b1 * f_mag_calibration_A[3]) +
+                                        (z_mag_b2 * f_mag_calibration_A[6]);
+        sensor_data[Y_MAGNET]   = (x_mag_b0 * f_mag_calibration_A[1]) +
+                                    (y_mag_b1 * f_mag_calibration_A[4]) +
+                                        (z_mag_b2 * f_mag_calibration_A[7]);
+        sensor_data[Z_MAGNET]   = (x_mag_b0 * f_mag_calibration_A[3]) +
+                                    (y_mag_b1 * f_mag_calibration_A[5]) +
+                                        (z_mag_b2 * f_mag_calibration_A[8]);
+
+    }
+}
+
 
 /* ------------------------------------------------------------ */
 /*				Select the Mode									*/
@@ -176,6 +272,9 @@ static void correctOffset(float* sensor_data,uint8_t calibrate){
 	/* ------------------------------------------------------------ */
 
 	#define MAGNET_INIT 						(1)
+    #define MAGNET_READ_SENSITIVITY_VALUES      (1)
+    #define MAGNET_SELTEST_ON                   (1)
+
 	#define I2CMPU_ADRESS 						MPU_SLAVE_ADDR_1
 	#define ENABLE_BUSY_WAITING_READ			(0)					// for measurement purpose
 
@@ -521,31 +620,77 @@ static void correctOffset(float* sensor_data,uint8_t calibrate){
 		vTaskDelay( 50 );
 		// do a reset
 		i2cMpuWrite(I2CMPU_ADRESS,PWR_MGMT_1, H_RESET);
-
+		                                                // TODO why twice check and change
 		i2cMpuWrite(I2CMPU_ADRESS,PWR_MGMT_1, H_RESET);
-		// config Sensor to use internal 20 MHz clock
+		// configure Sensor to use internal 20 MHz clock
 		i2cMpuWrite(I2CMPU_ADRESS,PWR_MGMT_1, INT_20MHZ_CLOCK);
 		// set sample rate divider to Internal_Sample_Rate / (1 + SMPLRT_DIV)
 		i2cMpuWrite(I2CMPU_ADRESS,SMPLRT_DIV, 0x00);
-		// configue accelerometer
+		// configure accelerometer
 		i2cMpuWrite(I2CMPU_ADRESS,ACCEL_CONFIG, ACCEL_FS_2g);
-		// configure gyro
+		// configure gyroscope
 		i2cMpuWrite(I2CMPU_ADRESS,GYRO_CONFIG, GYRO_FS_500dps);
 		// INT Pin / Bypass Enable Configuration
 		i2cMpuWrite(I2CMPU_ADRESS,INT_PIN_CFG, BYPASS_EN);
 
 		// Init Magnetometer
 		#if (MAGNET_INIT == 1)
+
+		    // TODO read sensitivity test
+            #if (MAGNET_READ_SENSITIVITY_VALUES == 1)
 			// Perform a soft reset
-			i2cMpuWrite(MAGNET_ADRESS,MAGNET_CNTL2, MAGNET_SRST);
-			// Continous mode and 16 bit mode
-			i2cMpuWrite(MAGNET_ADRESS,MAGNET_CNTL1, MAGNET_CONTINUOUS_MODE1 | MAGNET_16_BIT_OUTPUT);
+			i2cMpuWrite(MAGNET_ADRESS, MAGNET_CNTL2, MAGNET_SRST);
+
+			// Read adjustment values in Fuse ROM access mode
+			i2cMpuWrite(MAGNET_ADRESS, MAGNET_CNTL1, MAGNET_FUSE_ROM_MODE | MAGNET_16_BIT_OUTPUT);
 
 			// Read out the sensitivity adjustment values
-			uint8_t ASA_val[3];
+            uint8_t ASAX_val[1] = {0};
+            uint8_t ASAY_val[1] = {0};
+            uint8_t ASAZ_val[1] = {0};
 
-			// read Magned Sensor Data
-			I2cBurstReadBlocking(READ_MAGNET,MAGNET_ADRESS,MAGNET_ASAX, ASA_val, 3);
+
+            // read Magned Sensor Data
+            I2cBurstReadBlocking(READ_MAGNET,MAGNET_ADRESS,MAGNET_ASAX, ASAX_val, 1);
+            I2cBurstReadBlocking(READ_MAGNET,MAGNET_ADRESS,MAGNET_ASAY, ASAY_val, 1);
+            I2cBurstReadBlocking(READ_MAGNET,MAGNET_ADRESS,MAGNET_ASAZ, ASAZ_val, 1);
+
+
+            #endif
+
+            // TODO self test test
+            #if (MAGNET_SELTEST_ON == 1)
+
+            // Perform a soft reset
+            i2cMpuWrite(MAGNET_ADRESS, MAGNET_CNTL2, MAGNET_SRST);
+
+
+			i2cMpuWrite(MAGNET_ADRESS,MAGNET_ASTC, MAGNET_SELFTEST_BIT_ON);
+
+			// Magnet self test mode and 16 bit mode
+			i2cMpuWrite(MAGNET_ADRESS,MAGNET_CNTL1, MAGNET_SEFL_TEST_MODE | MAGNET_16_BIT_OUTPUT);
+
+			uint8_t ui8_selftest_val[7];
+
+			I2cBurstReadBlocking(READ_MAGNET,MAGNET_ADRESS,MAGNET_HXL, ui8_selftest_val, 7);
+
+			s_rawData.x_magnet = (ui8_selftest_val[1]<<8) + ui8_selftest_val[0];
+            s_rawData.y_magnet = (ui8_selftest_val[3]<<8) + ui8_selftest_val[2];
+            s_rawData.z_magnet = (ui8_selftest_val[5]<<8) + ui8_selftest_val[4];
+
+            e_sensorReadState=READY;
+
+            i2cMpuWrite(MAGNET_ADRESS,MAGNET_ASTC, MAGNET_SELFTEST_BIT_OFF);
+
+
+            #endif
+
+        // Perform a soft reset
+        i2cMpuWrite(MAGNET_ADRESS, MAGNET_CNTL2, MAGNET_SRST);
+
+        // Continous mode and 16 bit mode
+        i2cMpuWrite(MAGNET_ADRESS,MAGNET_CNTL1, MAGNET_CONTINUOUS_MODE2 | MAGNET_16_BIT_OUTPUT);
+
 
 		#endif
 
@@ -563,16 +708,36 @@ static void correctOffset(float* sensor_data,uint8_t calibrate){
 
 		i2cGetMpuData(sensor_data);
 
-		// compensate out the offset
-		correctOffset(sensor_data,1);
 
 		// TODO test to send data delete later
-		//i2cCopyFloatMPUData(sensor_data);
+		  //      i2cCopyMPUData(gi16_sensor_data);
 
-		// perform sensor fusion
-		sensorFusion(sensor_data, gf_sensor_fusedAngles);
+		// compensate out the offset
+		//correctOffset(sensor_data,1);
 
-		// Madgwick test
+		IMUAxis2QCAxis(sensor_data);
+		convertIMUData(sensor_data);
+        correctIMUOffset(sensor_data, 1);
+
+
+		// TODO test to send data delete later
+		i2cCopyFloatMPUData(sensor_data);
+
+		// perform sensor fusion TODO test Madgwick Filter
+
+		MadgwickAHRSupdate(sensor_data[X_ACCEL], sensor_data[Y_ACCEL], sensor_data[Z_ACCEL],
+		                   sensor_data[X_GYRO], sensor_data[Y_GYRO], sensor_data[Z_GYRO],
+		                  sensor_data[X_MAGNET], sensor_data[Y_MAGNET], sensor_data[Z_MAGNET]);
+
+        new_quaternion[0] = q[0];
+        new_quaternion[1] = q[1];
+        new_quaternion[2] = q[2];
+        new_quaternion[3] = q[3];
+
+
+
+		//sensorFusion(sensor_data, gf_sensor_fusedAngles);
+
 
 	}
 
@@ -594,21 +759,45 @@ static void correctOffset(float* sensor_data,uint8_t calibrate){
 		//i2cCopyMPUData(gi16_sensor_data);
 
 		// compensate out the offset
-		correctOffset(sensor_data,0);
+		//correctOffset(sensor_data,0);
+
+
+		IMUAxis2QCAxis(sensor_data);
+		convertIMUData(sensor_data);
+		correctIMUOffset(sensor_data, 0);
 
 		// TODO test to send data delete later
-        //i2cCopyFloatMPUData(sensor_data);
+        i2cCopyFloatMPUData(sensor_data);
 
         //TODO test quaternion USB send
-        struct quat quat_transfer = fuseAccelAndGyro(sensor_data);
-        new_quaternion[0] = quat_transfer.w;
-        new_quaternion[1] = quat_transfer.x;
-        new_quaternion[2] = quat_transfer.y;
-        new_quaternion[3] = quat_transfer.z;
 
 
 
-		sensorFusion(sensor_data, gf_sensor_fusedAngles);
+         //perform sensor fusion TODO test Madgwick Filter
+        MadgwickAHRSupdate(sensor_data[X_ACCEL], sensor_data[Y_ACCEL], sensor_data[Z_ACCEL],
+                           sensor_data[X_GYRO],  sensor_data[Y_GYRO], sensor_data[Z_GYRO],
+                           sensor_data[X_MAGNET], sensor_data[Y_MAGNET], sensor_data[Z_MAGNET]);
+
+
+        new_quaternion[0] = q[0];
+        new_quaternion[1] = q[1];
+        new_quaternion[2] = q[2];
+        new_quaternion[3] = q[3];
+
+
+
+//
+//		sensorFusion(sensor_data, gf_sensor_fusedAngles);
+//
+//		struct quat q_rot;
+//
+//		q_rot = fuseAccelAndGyro(sensor_data);
+//
+//		new_quaternion[0] = q_rot.w;
+//        new_quaternion[1] = q_rot.x;
+//        new_quaternion[2] = q_rot.y;
+//        new_quaternion[3] = q_rot.z;
+
 	}
 
 #elif ( setup_SENSOR_NONE == (setup_SENSOR&setup_MASK_OPT1) )

@@ -345,6 +345,7 @@ static void StateResting(void)
     }
 
     else
+
         Sensor_ReadAndFusion();
 
 	Motor_StopAll();

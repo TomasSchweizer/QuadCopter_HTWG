@@ -15,14 +15,11 @@
 
 //  Hardware Specific
 #include "inc/hw_memmap.h"
-
-#include "driverlib/usb.h"
 #include "driverlib/gpio.h"
 #include "driverlib/pin_map.h"
 #include "driverlib/uart.h"
 #include "driverlib/sysctl.h"
 #include "driverlib/rom.h"
-#include "driverlib/usb.h"
 #include "utils/uartstdio.h"
 // TODO USB new includes test
 
@@ -41,7 +38,10 @@
 
 // drivers
 #include "debug_interface.h"
-#include "math_quaternion.h"
+
+// utils
+#include "qc_math.h"
+
 
 
 /* ------------------------------------------------------------ */
@@ -295,7 +295,7 @@
 	    int i;
 	    for(i = 0; i < sizeof(ui8_txArraySend); i++){
 	       g_pui8USBTxBuffer[ui32_WriteIndex] = ui8_txArraySend[i];
-	       ui32_WriteIndex = increment(ui32_WriteIndex, BULK_BUFFER_SIZE);
+	       ui32_WriteIndex = increment2Limit(ui32_WriteIndex, BULK_BUFFER_SIZE);
 	    }
 
 	    // indicates that the client has written data in the transmit buffer and wants to transmit it

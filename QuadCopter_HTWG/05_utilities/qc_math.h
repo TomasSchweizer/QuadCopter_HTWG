@@ -102,6 +102,7 @@ typedef struct math_pidController_s
 /*					API Procedure Declarations					*/
 /* ------------------------------------------------------------ */
 
+extern uint32_t increment2Limit(uint32_t value, uint32_t limit);
 extern float Math_StepPidController(math_pidController_s *ps_pidC);
 extern void  Math_StepLowPassFilter(math_lowPassFilter_s *ps_lpf);
 

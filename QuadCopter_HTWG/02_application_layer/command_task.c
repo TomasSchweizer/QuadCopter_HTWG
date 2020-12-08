@@ -140,7 +140,7 @@ uint32_t CommandTask_Init(void)
 
 	//
 	// Create a timer, which inserts every x ms a UpdateFunktion into the Command Queue
-	//
+	// TODO add USB as alternative why the timer is used
 	#if ( setup_DISPLAY_NONE!=(setup_DISPLAY&setup_MASK_OPT1) || setup_DEV_PID_TUNE )
 
 		TimerHandle_t xTimer = xTimerCreate(		// create a timer to update stuff every x ms

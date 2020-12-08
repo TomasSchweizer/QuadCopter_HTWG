@@ -1,4 +1,5 @@
 import numpy as np
+import transforms3d as tf3d
 
 def rad2deg(rad):
     return rad / np.pi * 180
@@ -7,6 +8,8 @@ def deg2rad(deg):
     return deg / 180 * np.pi
 
 def get_rot_mat(q):
+
+    '''
     c00 = q[0] ** 2 + q[1] ** 2 - q[2] ** 2 - q[3] ** 2
     c01 = 2 * (q[1] * q[2] - q[0] * q[3])
     c02 = 2 * (q[1] * q[3] + q[0] * q[2])
@@ -19,6 +22,13 @@ def get_rot_mat(q):
 
     rot_mat = np.array([[c00, c01, c02, 0], [c10, c11, c12, 0], [c20, c21, c22, 0], [0, 0, 0, 1]], 'f')
     return rot_mat
+    '''
+
+    rot_mat_3x3 = tf3d.quaternions.quat2mat(q)
+    rot_mat_4x3 = np.append(rot_mat_3x3, [[0.0, 0.0, 0.0]], axis=0)
+    rot_mat_4x4 = np.append(rot_mat_4x3, [[0.0], [0.0], [0.0], [1.0]], axis=1)
+
+    return rot_mat_4x4
 
 
 def get_euler_angles(q):
@@ -53,17 +63,37 @@ def get_euler_angles(q):
     return yaw, pitch, roll
     '''
 
-    yaw = np.arctan2(2*(q[1]*q[2]-q[0]*q[3]), 1-2*q[1]**2 + 2*q[2]**2)
-    pitch_1 = -np.arcsin(2*q[1]*q[3]+2*q[0]*q[2])
-    roll_1 = np.arctan2(2*q[2]*q[3]-2*q[0]*q[1], 2*q[0]**2+2*q[3]**2-1)
-
-    # swop roll and pitch and inverse of roll
-    yaw = rad2deg(yaw)
-    pitch = -rad2deg(roll_1)
-    roll = rad2deg(pitch_1)
+    '''
+    
+    a12 = 2.0 * (q[1] * q[2] + q[0] * q[3])
+    a22 = q[0] * q[0] + q[1] * q[1] - q[2] * q[2] - q[3] * q[3]
+    a31 = 2.0 * (q[0] * q[1] + q[2] * q[3])
+    a32 = 2.0 * (q[1] * q[3] - q[0] * q[2])
+    a33 = q[0] * q[0] - q[1] * q[1] - q[2] * q[2] + q[3] * q[3]
+    pitch = -np.arcsin(a32)
+    roll = np.arctan2(a31, a33)
+    yaw = np.arctan2(a12, a22)
+    pitch *= 180.0 / np.pi
+    yaw *= 180.0 / np.pi
+    yaw += 2.56 #Declination
+    if yaw < 0.0:
+        yaw += 360.0 #Ensure yaw stays between 0 and 360
+    roll *= 180.0 / np.pi
 
     return yaw, pitch, roll
+    '''
 
+
+    rot_axis_and_angles = tf3d.quaternions.quat2axangle(q)
+
+    rot_axis = rot_axis_and_angles[0]
+    rot_angle = rot_axis_and_angles[1]
+
+    roll = rad2deg(rot_axis[0]*rot_angle)
+    pitch = rad2deg(rot_axis[1]*rot_angle)
+    yaw = rad2deg(rot_axis[2]*rot_angle)
+
+    return roll, pitch, yaw
 
 class Quaternion:
     def __init__(self):
