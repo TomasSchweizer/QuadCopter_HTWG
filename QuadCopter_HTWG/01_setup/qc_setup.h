@@ -57,17 +57,18 @@
 #define setup_REMOTE_SIMULATE			( 0x00000003 )			// remote control get funktions will output const values and every x ms a receiver eventBit will be fired
 #define setup_REMOTE_RIGHT_HAND			( 0x00000100 )			// throttle on right hand
 #define setup_REMOTE_LEFT_HAND			( 0x00000200 )			// throttle on left hand
-#define setup_REMOTE      				( setup_REMODE_CPPM | setup_REMOTE_LEFT_HAND ) // TODO check why its working with right hand remote controll
+#define setup_REMOTE_FIT_TO_QC          ( 0x00010000 )          // Fit remote control input to quadcopter rotational axes (inverse yaw, roll and pitch)
+#define setup_REMOTE      				( setup_REMODE_CPPM | setup_REMOTE_RIGHT_HAND | setup_REMOTE_FIT_TO_QC ) // TODO check why its working with right hand remote controll
 
 // Select the Mode for the sensor (others will be exclude from build)
 #define setup_SENSOR_NONE  				( 0x00000001 )			// all sensor functions will do nothing
 #define setup_SENSOR_SPI  				( 0x00000002 )			// not portet from Eckstein
 #define setup_SENSOR_I2C  				( 0x00000003 )			// tested
-#define setup_SENSOR_INV_ROLL			( 0x00000100 )			// invert roll  signal
-#define setup_SENSOR_INV_PITCH			( 0x00000200 )			// invert pitch signal
-#define setup_SENSOR_INV_YAW			( 0x00000400 )			// invert yaw 	signal
-#define setup_SENSOR_SWOP_ROLL_PITCH	( 0x00000800 )			// swop roll and pitch signals
-#define setup_SENSOR      				( setup_SENSOR_I2C | setup_SENSOR_INV_ROLL | setup_SENSOR_SWOP_ROLL_PITCH )
+//#define setup_SENSOR_INV_ROLL			( 0x00000100 )			// invert roll  signal
+//#define setup_SENSOR_INV_PITCH			( 0x00000200 )			// invert pitch signal
+//#define setup_SENSOR_INV_YAW			( 0x00000400 )			// invert yaw 	signal
+//#define setup_SENSOR_SWOP_ROLL_PITCH	( 0x00000800 )			// swop roll and pitch signals
+#define setup_SENSOR      				( setup_SENSOR_I2C)
 
 // Select the Mode for the display (others will be exclude from build, & all display functions use HIDE!)
 #define setup_DISPLAY_NONE  			( 0x00000001 )			// all display funktions will do nothing and consume no memmory (HIDE)
@@ -79,7 +80,7 @@
 #define setup_DEBUG_NONE  				( 0x00000001 )					// all debug interface functions will do nothing and consume no memmory (HIDE)
 #define setup_DEBUG_UART  				( 0x00000002 )					// tested
 #define setup_DEBUG_USB  				( 0x00000003 )					// TODO debug and code changes
-#define setup_DEBUG_UART_USB            ( 0x00000004 )                  // TODO test to implememt UART and USB at the same time
+#define setup_DEBUG_UART_USB            ( 0x00000004 )                  // TODO test to implememt UART and USB at the same time change with to masks
 #define setup_DEBUG      				( setup_DEBUG_USB )
 
 #endif // __QC_SETUP_H__

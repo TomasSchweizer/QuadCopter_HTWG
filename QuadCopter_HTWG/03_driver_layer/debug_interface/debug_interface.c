@@ -89,7 +89,7 @@
 	   // Use the internal 16MHz oscillator as the UART clock source.
 		UARTClockSourceSet(periph_DEBUG_UART_BASE, UART_CLOCK_PIOSC);
 
-		// Init des UART  115200
+		// Init des UART  9600
 		UARTStdioConfig(0, 9600, 16000000);
 
 		// Enable 16x8Bit FIFO
@@ -106,7 +106,11 @@
 	 */
 	void HIDE_Debug_InterfaceGet(int32_t* i32_buff)
 	{
-		*i32_buff = UARTCharGetNonBlocking(periph_DEBUG_UART_BASE);
+
+
+        *i32_buff = UARTCharGetNonBlocking(periph_DEBUG_UART_BASE);
+
+
 	}
 
 	/**
@@ -149,7 +153,8 @@
     #endif
 
 	static bool b_USBDeviceConnected = false;
-	//static volatile ui32_TXTransmitCounter = 0;
+	static volatile uint32_t ui32_RXTransmitCounter = 0;
+
 
 	/* ------------------------------------------------------------ */
     /*              Procedure Definitions                           */
@@ -306,6 +311,34 @@
 
 	}
 
+	// TODO Receive PID values
+	void HIDE_Debug_USB_InterfaceReceive(uint8_t pid_values_buffer[14]){
+
+	    uint32_t ui32_readIndex;
+	    tUSBRingBufObject sRxRing;
+
+
+	    if(g_pui8USBRxBuffer[0] == 115 && ui32_RXTransmitCounter == 3)
+	    {
+
+
+	        ui32_RXTransmitCounter = 0;
+
+	        USBBufferInfoGet(&g_sRxBuffer, &sRxRing);
+	        ui32_readIndex = sRxRing.ui32ReadIndex;
+
+	        int i;
+            for(i = 0; i < 14; i++){
+
+                pid_values_buffer[i] = g_pui8USBRxBuffer[ui32_readIndex];
+                ui32_readIndex = increment2Limit(ui32_readIndex, BULK_BUFFER_SIZE);
+            }
+            USBBufferDataRemoved(&g_sRxBuffer, 14);
+
+         }
+
+	}
+
 	//*****************************************************************************
 	//
 	// Handles bulk driver notifications related to the transmit channel (data to
@@ -386,7 +419,10 @@
 	        //
 	        case USB_EVENT_RX_AVAILABLE:
 	        {
-
+	            ui32_RXTransmitCounter++;
+	            if(ui32_RXTransmitCounter > 3)
+	                USBBufferFlush(&g_sRxBuffer);
+	            break;
 	        }
 
 	        //

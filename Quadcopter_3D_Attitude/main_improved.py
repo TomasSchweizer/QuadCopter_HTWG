@@ -6,6 +6,7 @@ import numpy as np
 import scipy.io
 import math
 
+
 import pygame as pg
 from pygame.locals import *
 
@@ -29,14 +30,16 @@ USB_DATA = USB_QUATERNIONS
 roll_array = np.empty([])
 pitch_array = np.empty([])
 yaw_array = np.empty([])
-quat_array = np.empty([1, 1, 1, 1])
+quat_array = np.array([1, 0, 0, 0])
 samples_array = np.zeros([])
 
 # array for coordinate frame rotation
-rot_coordinate_frame = np.array([[-1.0, 0.0, 0.0, 0.0], [0.0, -1.0, 0.0, 0.0],
-                                 [0.0, 0.0, -1.0, 0.0], [0.0, 0.0, 0.0, 1.0]])
-inverse_y_rot = np.array([[1.0, 0.0, 0.0, 0.0], [0.0, -1.0, 0.0, 0.0],
-                            [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]])
+rot_coordinate_frame_x = np.array([[1.0, 0.0, 0.0, 0.0], [0.0, math.cos(math.pi), -math.sin(math.pi), 0.0],
+                                 [0.0, math.sin(math.pi), math.cos(math.pi), 0.0], [0.0, 0.0, 0.0, 1.0]])
+rot_coordinate_frame_y = np.array([[math.cos(math.pi), 0.0, math.sin(math.pi), 0.0], [0.0, 1.0, 0.0, 0.0],
+                                 [math.sin(math.pi), 0.0, math.cos(math.pi), 0.0], [0.0, 0.0, 0.0, 1.0]])
+rot_coordinate_frame_z = np.array([[math.cos(math.pi), -math.sin(math.pi), 0.0, 0.0], [math.sin(math.pi), math.cos(math.pi), 0.0, 0.0],
+                                  [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]])
 
 
 
@@ -90,11 +93,11 @@ class View3D:
                     quit()
 
             data = self.usb_device.usb_read_data()
-
+            print(data)
             self.wireframe.quaternion.q = data
             # inverse rotation around th y axis
-            self.wireframe.quaternion.q *= np.array([1.0, 1.0, -1.0, 1.0])
-            #print(data)
+            #self.wireframe.quaternion.q *= np.array([1.0, 1.0, -1.0, 1.0])
+
 
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
             glLoadIdentity()
@@ -110,13 +113,11 @@ class View3D:
             self.drawText((-4.5, -2.7, 2), "ROLL: %f" % (roll), 16)
 
             glPushMatrix()
-            glMultMatrixf(rot_coordinate_frame)
             self.display_reference_frame()
             glPopMatrix()
 
             glPushMatrix()
             glMultMatrixf(self.wireframe.rotation_mat())
-            glMultMatrixf(rot_coordinate_frame)
             self.display_block()
             glPopMatrix()
             self.save_values()
@@ -137,19 +138,19 @@ class View3D:
 
         global roll_array, pitch_array, yaw_array, quat_array, samples_array
 
-        yaw, pitch, roll = self.wireframe.get_attitude()
+        #yaw, pitch, roll = self.wireframe.get_attitude()
 
         # TODO: ( test later in c code) find true north woth addition of declination
 
         quat = self.wireframe.quaternion.q
 
 
-        roll_array = np.append(roll_array, roll)
-        pitch_array = np.append(pitch_array, pitch)
-        yaw_array = np.append(yaw_array, yaw)
+        #roll_array = np.append(roll_array, roll)
+        #pitch_array = np.append(pitch_array, pitch)
+        #yaw_array = np.append(yaw_array, yaw)
 
         quat_array = np.append(quat_array, [quat])
-        samples_array = np.append(samples_array, len(roll_array) - 1)
+        #samples_array = np.append(samples_array, len(roll_array) - 1)
 
     # Draw block with PyOpenGl
     def display_block(self):
@@ -212,7 +213,13 @@ class View3D:
                 node_vec = (node.x, node.y, node.z)
 
                 glVertex3fv(node_vec)
+
         glEnd()
+
+
+        self.drawText((3.25, 0.0, 0.0), "N", 18)
+        self.drawText((0.0, 3.25, 0.0), "E", 18)
+        #self.drawText((0.0, 0.0, 3.25), "U", 18)
 
 
 # initialize the block/rectangular cube with values
@@ -256,9 +263,9 @@ def init_block():
 
     # create pointer of quadcopter
     # create starting nodes/ colors of the reference frame
-    block_axes_nodes = [(4.0, 0.0, 0.0), (0.0, 0.0, 0.0), (4.0, 0.0, 0.0), (3.825, 0.125, 0.0), (4.0, 0.0, 0.0), (3.825, -0.125, 0.0),
-                             (0.0, 4.0, 0.0), (0.0, 0.0, 0.0), (0.0, 4.0, 0.0), (0.125, 3.825, 0.0), (0.0, 4.0, 0.0), (-0.125, 3.825, 0.0),
-                             (0.0, 0.0, 4.0), (0.0, 0.0, 0.0), (0.0, 0.0, 4.0), (0.0, 0.125, 3.825), (0.0, 0.0, 4.0), (0.0, -0.125, 3.825)]
+    block_axes_nodes = [(3.0, 0.0, 0.0), (0.0, 0.0, 0.0), (3.0, 0.0, 0.0), (2.825, 0.125, 0.0), (3.0, 0.0, 0.0), (2.825, -0.125, 0.0),
+                             (0.0, 3.0, 0.0), (0.0, 0.0, 0.0), (0.0, 3.0, 0.0), (0.125, 2.825, 0.0), (0.0, 3.0, 0.0), (-0.125, 2.825, 0.0),
+                             (0.0, 0.0, 3.0), (0.0, 0.0, 0.0), (0.0, 0.0, 3.0), (0.0, 0.125, 2.825), (0.0, 0.0, 3.0), (0.0, -0.125, 2.825)]
     axes_nodes_colors = [(255, 255, 255)] * len(block_axes_nodes)
 
     # add and print all nodes to reference frame
@@ -281,9 +288,9 @@ def init_reference_frame():
     reference_frame = fr.ReferenceFrame()
 
     # create starting nodes/ colors of the reference frame
-    reference_frame_nodes = [(-4.0, 0.0, 0.0), (4.0, 0.0, 0.0), (4.0, 0.0, 0.0), (3.825, 0.125, 0.0), (4.0, 0.0, 0.0), (3.825, -0.125, 0.0),
-                             (0.0, -4.0, 0.0), (0.0, 4.0, 0.0), (0.0, 4.0, 0.0), (0.125, 3.825, 0.0), (0.0, 4.0, 0.0), (-0.125, 3.825, 0.0),
-                             (0.0, 0.0, -4.0), (0.0, 0.0, 4.0), (0.0, 0.0, 4.0), (0.0, 0.125, 3.825), (0.0, 0.0, 4.0), (0.0, -0.125, 3.825)]
+    reference_frame_nodes = [(-3.0, 0.0, 0.0), (3.0, 0.0, 0.0), (3.0, 0.0, 0.0), (2.825, 0.125, 0.0), (3.0, 0.0, 0.0), (2.825, -0.125, 0.0),
+                             (0.0, -3.0, 0.0), (0.0, 3.0, 0.0), (0.0, 3.0, 0.0), (0.125, 2.825, 0.0), (0.0, 3.0, 0.0), (-0.125, 2.825, 0.0),
+                             (0.0, 0.0, -3.0), (0.0, 0.0, 3.0), (0.0, 0.0, 3.0), (0.0, 0.125, 2.825), (0.0, 0.0, 3.0), (0.0, -0.125, 2.825)]
     rf_nodes_colors = [(255, 255, 255)] * len(reference_frame_nodes)
 
     # add and print all nodes to reference frame

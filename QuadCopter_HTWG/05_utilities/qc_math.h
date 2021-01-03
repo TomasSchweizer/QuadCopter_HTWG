@@ -29,6 +29,12 @@
   * \param	f_rad	the floating point number to convert
   */
 #define math_RAD2NORM(f_rad)			(f_rad*  1.0f/(2.0f*math_PI))
+
+ /**
+  * \brief  convert normalized to radiant (floating point)
+  * \param  f_rad   the floating point number to convert
+  */
+#define math_NORM2RAD(f_rad)            (f_rad* (2.0f*math_PI))
  /**
   * \brief	convert degree to radiant (floating point)
   * \param	f_dec	the floating point number to convert
@@ -105,6 +111,8 @@ typedef struct math_pidController_s
 extern uint32_t increment2Limit(uint32_t value, uint32_t limit);
 extern float Math_StepPidController(math_pidController_s *ps_pidC);
 extern void  Math_StepLowPassFilter(math_lowPassFilter_s *ps_lpf);
+double clamp(double value, double min, double max);
+extern void Math_QuatToEuler(float q[], float fusedAngles[]);
 
 /* ------------------------------------------------------------ */
 /*					Global Variables							*/

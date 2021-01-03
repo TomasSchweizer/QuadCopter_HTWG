@@ -26,7 +26,7 @@
 #include "display_driver.h"
 
 // application
-#include "flight_control.h"
+#include "flight_control.h" // TODO changed for own PID controller test
 #include "flight_task.h"
 #include "receiver_task.h"		// GetSetPoints
 #include "fault.h"
@@ -286,6 +286,9 @@ static void StateFlying(EventBits_t x_faultEventBits)
 	Control_Mixer();
 
 	Motor_OutputAll();
+
+
+
 }
 
 /**
@@ -325,6 +328,7 @@ static void StateLanding(EventBits_t x_faultEventBits)
 		Control_FlightStabilisation();
 		Control_Mixer();
 		Motor_OutputAll();
+
 	}
 
 }
@@ -345,9 +349,15 @@ static void StateResting(void)
     }
 
     else
+    {
+
 
         Sensor_ReadAndFusion();
-
+//        // TODO test output PIDs without battery
+//        ReceiverTask_GetSetPoints(&gf_flight_setPoint[0]);
+//        Control_FlightStabilisation();
+//        Control_Mixer();
+    }
 	Motor_StopAll();
 }
 

@@ -83,7 +83,6 @@ def get_euler_angles(q):
     return yaw, pitch, roll
     '''
 
-
     rot_axis_and_angles = tf3d.quaternions.quat2axangle(q)
 
     rot_axis = rot_axis_and_angles[0]
@@ -93,9 +92,13 @@ def get_euler_angles(q):
     pitch = rad2deg(rot_axis[1]*rot_angle)
     yaw = rad2deg(rot_axis[2]*rot_angle)
 
+    print("Roll: %f" % roll)
+    print("Pitch: %f" % pitch)
+    print("Yaw: %f" % yaw)
+
     return roll, pitch, yaw
 
 class Quaternion:
     def __init__(self):
-        self.q = np.array([1, 0, 0, 0])  # Initial state of the quaternion
+        self.q = np.array([1.0, 0.0, 0.0, 0.0])  # Initial state of the quaternion
 

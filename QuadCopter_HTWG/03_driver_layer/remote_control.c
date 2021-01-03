@@ -41,11 +41,11 @@
 // Maximum values remote control
 #define ROLL_MAX		(15.0f*math_PI/180.0f)				// [-max...+max] [rad]
 #define PITCH_MAX		(15.0f*math_PI/180.0f)				// [-max...+max] [rad]
-#define YAW_MAX			( 3.0f*math_PI/180.0f)				// [-max...+max] [rad/s]
+#define YAW_MAX			( 10.0f*math_PI/180.0f)				// [-max...+max] [rad/s] // TODO make max higher
 #define THROTTLE_MAX	(1.0f)							// [0   ...+max] []
 
 // Limits a value between the given borders low and high
-#define limitValue(value, low, high) ((value)<(low)?(low):((value)>(high)?(high):(value)))
+#define limitValue(value, low, high) ((value)<(low)?(low):((value)>(high)?(high):(value))) // TODO bring to qc_math
 
 /** \brief	Number of Channles in the CPPM signal */
 #define remote_CPPM_CHANNELS 		  ( 6 )
@@ -110,7 +110,7 @@ const float f_maxValues[] = {ROLL_MAX, PITCH_MAX, YAW_MAX, THROTTLE_MAX};
 
 	// Order of the Channels in the CPPM Signal	(different for left and right hand)
 	#if   ( setup_REMOTE_RIGHT_HAND == (setup_REMOTE&setup_MASK_OPT2) )
-		#define CPPM_ORDER			{ remote_ROLL , remote_PITCH , remote_THROTTLE , remote_YAW , remote_AUX1 , remote_RESERVE}
+		#define CPPM_ORDER			{ remote_YAW , remote_PITCH , remote_THROTTLE , remote_ROLL , remote_AUX1 , remote_RESERVE}
 	#elif ( setup_REMOTE_LEFT_HAND == (setup_REMOTE&setup_MASK_OPT2) )
 		#define CPPM_ORDER			{ remote_YAW , remote_PITCH , remote_THROTTLE , remote_ROLL , remote_AUX1 , remote_RESERVE}
 	#else
@@ -294,8 +294,14 @@ const float f_maxValues[] = {ROLL_MAX, PITCH_MAX, YAW_MAX, THROTTLE_MAX};
 			f_receiverSetPoint[i]=help;
 		}
 
-		f_receiverSetPoint[remote_ROLL]=-f_receiverSetPoint[remote_ROLL];	// invert ROLL
-		//
+		// Fit remote control input to quadcopter rotational axes
+		if( setup_REMOTE_FIT_TO_QC == (setup_REMOTE&setup_MASK_OPT3) ){
+
+		f_receiverSetPoint[remote_YAW]=     -f_receiverSetPoint[remote_YAW];	// invert YAW // TODO maybe don'T invert anymore
+		f_receiverSetPoint[remote_PITCH]=   -f_receiverSetPoint[remote_PITCH];  // invert PITCH
+		f_receiverSetPoint[remote_ROLL]=    -f_receiverSetPoint[remote_ROLL];   // invert ROLL
+		}
+
 		// check if remote control has a fault
 		//
 		if(IS_AUX_LOST(i32_receiverData[remote_AUX1]))

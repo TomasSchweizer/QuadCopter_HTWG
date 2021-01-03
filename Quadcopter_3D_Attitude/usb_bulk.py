@@ -1,4 +1,5 @@
 import usb.core
+import usb.backend.libusb1
 import usb.util
 import struct
 import numpy as np
@@ -20,7 +21,8 @@ class USBBulkDevice:
 
         self.id_vendor = id_vendor
         self.id_product = id_product
-        self.dev = usb.core.find(idVendor=self.id_vendor, idProduct=self.id_product)
+        self.backend = usb.backend.libusb1.get_backend(find_library="Quadcopter_3D_Attitude/libusb-1.0.dll")
+        self.dev = usb.core.find(idVendor=self.id_vendor, idProduct=self.id_product, backend=self.backend)
         # check if device was found
         try:
             print('Search for Device ...')

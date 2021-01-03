@@ -10,6 +10,8 @@
 /* ------------------------------------------------------------ */
 
 #include <stdint.h>
+#include <math.h>
+#include <float.h>
 
 // freeRTOS
 #include "FreeRTOS.h"		// for pvPortMalloc
@@ -57,10 +59,18 @@ uint32_t increment2Limit(uint32_t value, uint32_t limit) {
     return value;
 }
 
+double clamp(double value, double min, double max){
 
+    if(value >= max){
+        value = max;
+    } else if(value <= min){
+        value = min;
+    } else{
+        value = value;
+    }
 
-
-
+    return value;
+}
 
 /**
  * \brief	calculate one time step for the desired PID Controller.
@@ -102,7 +112,7 @@ float Math_StepPidController(math_pidController_s *ps_pidC)
 
 /**
  * \brief	calculate PID Controller output Signal and Check if
- *			ontroller has to go into Saturation.
+ *			controller has to go into Saturation.
  * \param	ps_pidC   		Pointer to the PID Controller
  */
 static void PidControllerCalcOutput(math_pidController_s *ps_pidC)
@@ -149,4 +159,50 @@ void Math_StepLowPassFilter(math_lowPassFilter_s *ps_lpf)
 {
 	ps_lpf->f_output = *ps_lpf->pf_input * (ps_lpf->f_sampleTime / ps_lpf->f_timeConstant) - ps_lpf->f_outputOld * (ps_lpf->f_sampleTime / ps_lpf->f_timeConstant - 1);
 	ps_lpf->f_outputOld = ps_lpf->f_output;
+}
+
+
+/**
+ * \brief   calculate Euler/Tait-Bryan angles out of quaternions
+ *
+ *          Make sure that this function is called periodically
+ *          every fSampleTime [s] seconds.
+ * \param   ps_lpf          Pointer to the Low Pass Filter
+ */
+// TODO change so that it is applicable also without the global variable
+void Math_QuatToEuler(float q[], float fusedAngles[]){
+
+    float yaw, pitch, roll;
+
+    float sq0 =  (q[0]*q[0]);
+    float sq1 =  (q[1]*q[1]);
+    float sq2 =  (q[2]*q[2]);
+    float sq3 =  (q[3]*q[3]);
+
+    float test = 2.0 * (q[2]*q[0] - q[1]*q[3]);
+
+    if(test > 0.999 && test < 1.001){
+
+        yaw = (float) (-2.0*atan2f(q[1], q[0]));
+        roll = 0.0;
+        pitch = (float) (math_PI/2.0);
+    }
+    else if(test > -1.001 && test < -0.999){
+
+        yaw = (float) (2.0*atan2f(q[1], q[0]));
+        roll = 0.0;
+        pitch = (float) (math_PI/-2.0);
+    } else {
+
+        yaw = (float) atan2f(2.0 * (q[1]*q[2] + q[3]*q[0]), (sq1 - sq2 - sq3 + sq0));
+        roll = (float) atan2f(2.0 * (q[2]*q[3] + q[1]*q[0]), (-sq1 + sq2 + sq3 + sq0));
+        pitch = (float) asinf(clamp(test, -1.0, 1.0));
+    }
+
+
+    fusedAngles[0] = roll;
+    fusedAngles[1] = pitch;
+    fusedAngles[2] = yaw;
+
+
 }

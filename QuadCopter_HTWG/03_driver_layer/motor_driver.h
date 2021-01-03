@@ -31,15 +31,17 @@
 /*				   	Type Definitions			    			*/
 /* ------------------------------------------------------------ */
 
+// TODO changed to uint16 from uint8 fro all read data test if working
 /** \brief	structure to store information for one motor. */
 typedef struct motor_Data_s
 {
-        uint16_t ui16_setPoint;              /**< [0 1] -> 0 motor off, 0xFFFF motor max speed */
-        uint8_t  ui8_current;                /**< in 0.1 A steps, read back from BL */
-        uint8_t  ui8_state;                  /**< read back from BL -> is less than 255 if BL is in current limit, not running (250) or starting (40)*/
-        uint8_t  ui8_temperature;            /**< old BL-Ctrl will return a 255 here, the new version the temp. in Grad Celsius */
-        uint8_t  ui8_rpm;                    /**< Raw value for RPM */
-        uint8_t  ui8_voltage;                /**< in 0.1V (BL3 is limited to 255, BL2 is only low-byte) */
+        uint16_t ui16_setPoint;
+        float f_current;
+        float f_temperature;
+        float  f_rpm;
+        float f_voltage;
+        uint8_t  ui8_state;
+
 } motor_Data_s;
 
 /* ------------------------------------------------------------ */
@@ -53,6 +55,8 @@ extern void Motor_StopAll(void);
 extern void Motor_Read(uint8_t ui8_motorNr);
 extern void Motor_ReadAll(void);
 extern void Motor_DrawDisplay(void);
+void HIDE_Motor_SendDataOverUSB(void);
+
 
 /* ------------------------------------------------------------ */
 /*					Global Variables							*/
