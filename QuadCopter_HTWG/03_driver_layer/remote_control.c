@@ -377,7 +377,7 @@ const float f_maxValues[] = {ROLL_MAX, PITCH_MAX, YAW_MAX, THROTTLE_MAX};
 	/**
 	 * \brief	Calibrate Roll, Pitch, Yaw to mid and Throttle to min
 	 */
-	void RemoteControl_Calibrate()
+	void RemoteControl_Calibrate(void)
 	{
 		int16_t i;
 		for( i=0 ; i<=3 ; ++i )

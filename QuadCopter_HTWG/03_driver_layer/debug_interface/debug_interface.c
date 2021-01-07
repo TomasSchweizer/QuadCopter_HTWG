@@ -35,6 +35,7 @@
 // setup
 #include "qc_setup.h"
 #include "peripheral_setup.h"
+#include "prioritys.h"
 
 // drivers
 #include "debug_interface.h"
@@ -148,6 +149,7 @@
 	    #define TRACE_SYSCTL_PERIPH_GPIO_USB    SYSCTL_PERIPH_GPIOD
         #define TRACE_GPIO_PORT_BASE_USB        GPIO_PORTD_BASE
         #define TRACE_GPIO_PINS_USB_ANALOG   (GPIO_PIN_4 | GPIO_PIN_5)
+        #define periph_USB_INT                  INT_USB0
     #else
         #error ERROR: define setup_DEBUG (in qc_setup.h)
     #endif
@@ -166,6 +168,8 @@
      */
 	void HIDE_Debug_USB_InterfaceInit(void)
 	{
+
+
 	    // Enable the GPIO peripheral used for USB, and configure the USB pins.
         SysCtlPeripheralEnable(TRACE_SYSCTL_PERIPH_GPIO_USB);
         GPIOPinTypeUSBAnalog(TRACE_GPIO_PORT_BASE_USB, TRACE_GPIO_PINS_USB_ANALOG);
@@ -179,6 +183,9 @@
 
         // Pass our device information to the USB library and place the device on the bus.
         USBDBulkInit(0, &g_sBulkDevice);
+
+        // Important to set USB interrupt priority lower than I2C (Motor/Sensor interrupt)
+        ROM_IntPrioritySet(periph_USB_INT,    priority_USB_ISR);
 
 	}
 
@@ -209,9 +216,6 @@
             k = 0;
             ui8_txArraySend[k] = ui8_txDataType;
             k++;
-
-
-
 
             switch(ui8_txDataType){
 

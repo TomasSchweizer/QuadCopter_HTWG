@@ -44,13 +44,8 @@
 /* ------------------------------------------------------------ */
 
 /**
- * \brief	converter between float and char Array
+ * \brief	converter between float/int16_t and uint8t Array
  */
-union {
-	float f;	/**< the float number */
-	char c[4];	/**< the char array number */
-} f2c_u;
-
 #if ( (setup_DEBUG_USB == (setup_DEBUG&setup_MASK_OPT1))  || (setup_DEBUG_UART_USB == (setup_DEBUG&setup_MASK_OPT1)) )
 
     typedef union f_ui8 {

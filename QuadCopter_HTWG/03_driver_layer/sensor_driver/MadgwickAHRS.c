@@ -1,50 +1,97 @@
 //=====================================================================================================
-// MadgwickAHRS.c
+// @file MadgwickAHRS.c
 //=====================================================================================================
 //
-// Implementation of Madgwick's IMU and AHRS algorithms.
-// See: http://www.x-io.co.uk/node/8#open_source_ahrs_and_imu_algorithms
+// @brief Implementation of Madgwick's AHRS algorithm.
 //
-// Date			Author          Notes
-// 29/09/2011	SOH Madgwick    Initial release
-// 02/10/2011	SOH Madgwick	Optimised for reduced CPU load
-// 19/02/2012	SOH Madgwick	Magnetometer measurement is normalised
+// Date			        Author                      Notes
+// @date 29/09/2011	    @author SOH Madgwick        Initial release
+// @date 02/10/2011	    @author SOH Madgwick	    Optimised for reduced CPU load
+// @date 19/02/2012	    @author SOH Madgwick	    Magnetometer measurement is normalised
+// @date 06/12/2020     @author Tomas Schweizer     Overall changes to fit to application
+//
+// Source:
+// http://www.x-io.co.uk/node/8#open_source_ahrs_and_imu_algorithms
+// https://github.com/kriswiner/MPU9250
 //
 //=====================================================================================================
 
-//---------------------------------------------------------------------------------------------------
-// Header files
-
-#include "MadgwickAHRS.h"
-#include <math.h>
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                     Include File Definitions                                       */
+/* ---------------------------------------------------------------------------------------------------*/
+// standard libaries
 #include <stdint.h>
+#include <math.h>
 
-//---------------------------------------------------------------------------------------------------
-// Definitions
+// own header file
+#include "MadgwickAHRS.h"
 
-#define SAMPLE_FREQ	500.0f		// sample frequency in Hz
-#define BETA_DEF 0.06f	    // Formula: sqrt(3/4) * PI * (4/180)
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                      Local Defines                                                 */
+/* ---------------------------------------------------------------------------------------------------*/
+/**
+ * \brief: gain factor for Madgwick filter [longterm same as gyroscope error]
+ *         a big beta leads to fast convergence but overshoot [1.0]
+ *         small beta leads to slow convergence but stable attitude estimation [0.006]
+ */
+#define BETA 0.006f
 
-//---------------------------------------------------------------------------------------------------
-// Variable definitions
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                      Local Type Definitions                                        */
+/* ---------------------------------------------------------------------------------------------------*/
 
-volatile float beta = BETA_DEF;
-volatile float q[4] = {1.0f, 0.0f, 0.0f, 0.0f};	// quaternion of sensor frame relative to auxiliary frame
-volatile float dt = 1 / SAMPLE_FREQ;
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                      Forward Declarations                                          */
+/* ---------------------------------------------------------------------------------------------------*/
 
-//---------------------------------------------------------------------------------------------------
-// Function declarations
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                      Global Variables                                              */
+/* ---------------------------------------------------------------------------------------------------*/
 
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                      Local Variables                                               */
+/* ---------------------------------------------------------------------------------------------------*/
+static uint16_t ui16_counterStartUpConvergence = 0;
 
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                      Procedure Definitions                                         */
+/* ---------------------------------------------------------------------------------------------------*/
 
-//====================================================================================================
-// Functions
-
-//---------------------------------------------------------------------------------------------------
-// AHRS algorithm update
-
-void MadgwickAHRSupdate(float ax, float ay, float az, float gx, float gy, float gz, float mx, float my, float mz)
+/**
+ * \brief   Update function of the Madgwick-AHRS filter.
+ *          It takes accelerometer, gyroscope and magnetometer data and calculates
+ *          a attitude quaternion.
+ *
+ *  \param  ax        ->       x measurement of the accelerometer
+ *  \param  ay        ->       y measurement of the accelerometer
+ *  \param  az        ->       z measurement of the accelerometer
+ *  \param  gx        ->       x measurement of the gyroscope
+ *  \param  gy        ->       y measurement of the gyroscope
+ *  \param  gz        ->       z measurement of the gyroscope
+ *  \param  mx        ->       x measurement of the magnetometer
+ *  \param  my        ->       y measurement of the magnetometer
+ *  \param  mz        ->       z measurement of the magnetometer *
+ *
+ *  \param  q         ->       takes the global gf_sensor_attitudeQuaternion
+ *                             and overwrites it with the newly calculated one
+ *  \param  dt        ->       sample time [0.002ms normaly]
+ *
+ */
+void MadgwickAHRSupdate(float ax, float ay, float az, float gx, float gy, float gz, float mx, float my, float mz, volatile float q[4], float dt)
 {
+   float beta;
+
+   if(ui16_counterStartUpConvergence < 1000)
+   {
+       beta = 0.6;
+       ui16_counterStartUpConvergence++;
+   }
+   else
+   {
+       beta = BETA;
+   }
+
+
    float q1 = q[0], q2 = q[1], q3 = q[2], q4 = q[3];   // short name local variable for readability
    float norm;
    float hx, hy, _2bx, _2bz;
@@ -134,6 +181,9 @@ void MadgwickAHRSupdate(float ax, float ay, float az, float gx, float gy, float 
    q[3] = q4 * norm;
 
 }
-//---------------------------------------------------------------------------------------------------
+
+//=====================================================================================================
+// End of file
+//=====================================================================================================
 
 
