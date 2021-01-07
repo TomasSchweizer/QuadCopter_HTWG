@@ -44,13 +44,8 @@
 /* ------------------------------------------------------------ */
 
 /**
- * \brief	converter between float and char Array
+ * \brief	converter between float/int16_t and uint8t Array
  */
-union {
-	float f;	/**< the float number */
-	char c[4];	/**< the char array number */
-} f2c_u;
-
 #if ( (setup_DEBUG_USB == (setup_DEBUG&setup_MASK_OPT1))  || (setup_DEBUG_UART_USB == (setup_DEBUG&setup_MASK_OPT1)) )
 
     typedef union f_ui8 {
@@ -97,13 +92,16 @@ union {
 	extern void HIDE_Debug_USB_InterfaceSend(void* pv_txBuffer, uint32_t ui32_count, uint8_t ui8_txDataType);
 	extern uint32_t TxHandler(void *pvCBData, uint32_t ui32Event, uint32_t ui32MsgValue, void *pvMsgData);
 	extern uint32_t RxHandler(void *pvCBData, uint32_t ui32Event, uint32_t ui32MsgValue, void *pvMsgData);
+	extern void HIDE_Debug_USB_InterfaceReceive(uint8_t pid_values_buffer[12]);
 
 #else
 
     #define HIDE_Debug_USB_InterfaceInit()                                          // this define will be kicked off from the preprocessor
     #define HIDE_Debug_USB_InterfaceSend(pv_txBuffer, ui32_count, ui8_txDataType)   // this define will be kicked off from the preprocessor
-    #define TxHandler(pvCBData, ui32Event, ui32MsgValue, pvMsgData);
+    #define HIDE_Debug_USB_InterfaceReceive(pid_values_buffer)
+	#define TxHandler(pvCBData, ui32Event, ui32MsgValue, pvMsgData);
     #define RxHandler(pvCBData, ui32Event, ui32MsgValue, pvMsgData);                // this define will be kicked off from the preprocessor
+
 
 #endif
 

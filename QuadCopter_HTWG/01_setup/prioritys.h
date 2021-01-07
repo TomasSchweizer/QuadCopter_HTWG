@@ -41,6 +41,7 @@
 // prio 0 can never call API from ISR!!! (see below)
 #define priority_REMOTE_ISR				( 4 << 5 )
 #define priority_DEBUGGER_ISR			( 6 << 5 )
+#define priority_USB_ISR                ( 6 << 5 )
 #define priority_SENSOR_ISR      		( 3 << 5 )
 #define priority_MOTOR_ISR				( 5 << 5 )
 

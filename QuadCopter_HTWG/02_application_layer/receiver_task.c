@@ -73,7 +73,7 @@ extern volatile uint32_t 		  gui32_flight_setPoint[4];
  *
  *			(see receiver_task.h for bit order)
  */
-volatile EventGroupHandle_t gx_receiver_eventGroup=0;
+volatile EventGroupHandle_t gx_receiver_eventGroup = 0;
 
 /**
  * \brief	Current input mode for flightStabilisation (e.g. receiver, thelemetrie, ...)

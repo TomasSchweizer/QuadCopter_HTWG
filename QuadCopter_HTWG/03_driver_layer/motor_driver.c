@@ -12,6 +12,9 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+// TODO test math.h
+#include <math.h>
+
 //  Hardware Specific
 #include "inc/hw_memmap.h"
 #include "inc/hw_ints.h"
@@ -23,6 +26,7 @@
 
 // drivers
 #include "workload.h"
+#include "debug_interface.h"
 #include "display_driver.h"
 #include "motor_driver.h"
 #include "fault.h"
@@ -86,6 +90,8 @@ volatile uint32_t 	  gui32_motor_fault=0;
 /** \brief	Order of the motors */
 static uint8_t	ui8_motorMap[motor_COUNT] = MOTOR_MAPPING;
 
+// TODO delete later test variable to send motor data over usb
+uint16_t ui16_motorDataUsb[4];
 /* ------------------------------------------------------------ */
 /*				Procedure Definitions							*/
 /* ------------------------------------------------------------ */
@@ -145,6 +151,7 @@ void Motor_DrawDisplay(void)
 	#define ESC_DATA_SIZE			(2047)		// esc daten  1 byte=255  2 byte=2047
 	#define ESC_I2C_SPEED			(1)			// 0 = 100kbit  1=400kbit
 	#define ESC_BASE_ADR			(0x29)		// simonk i2c base adr
+
 	/*  I2C Adress (Ist gerade noch nicht so!)
 	 * 	Write-Adress = I2C_BASE_ADR + MOTOR_NR * 2
 	 * 	Read -Adress = I2C_BASE_ADR + MOTOR_NR * 2 + 1
@@ -202,6 +209,7 @@ void Motor_DrawDisplay(void)
 	#endif
 
 	static uint8_t ui8_msg[8];						// message for I2C
+
 	static volatile int8_t i8_i2cWriteNum;					// to store which Motor to write & for I2C_MODE_... defines
 	static volatile int8_t i8_i2cReadNum;			// to store which Motor to read & for I2C_MODE_... defines
 	static workload_handle_p p_workHandle;
@@ -211,7 +219,9 @@ void Motor_DrawDisplay(void)
 
 	void Motor_I2CIntHandler(void);  // ausprobieren, sich selber in Tabelle eintragen (macht das wirklich sinn)
 	static void I2CWriteFinishCallback(void *pvData, uint_fast8_t ui8Status);
+	static void I2CReadFinishCallback(void *pvData, uint_fast8_t ui8Status);
 	static void I2CWriteSpeed(uint8_t ui8_motorNr);
+
 
 	/* ------------------------------------------------------------ */
 	/*				Procedure Definitions							*/
@@ -275,13 +285,14 @@ void Motor_DrawDisplay(void)
         for(i=0; i < motor_COUNT; i++)
         {
         	gs_motor[i].ui16_setPoint   = 0;
-        	gs_motor[i].ui8_current     = 0;
+        	gs_motor[i].f_current    = 0.0;
         	gs_motor[i].ui8_state       = 0;
-        	gs_motor[i].ui8_temperature = 0;
-        	gs_motor[i].ui8_rpm         = 0;
-        	gs_motor[i].ui8_voltage     = 0;
+        	gs_motor[i].f_temperature = 0.0;
+        	gs_motor[i].f_rpm         = 0.0;
+        	gs_motor[i].f_voltage     = 0.0;
         }
 		i8_i2cWriteNum = I2C_MODE_READY;
+		//i8_i2cReadNum = I2C_MODE_READY;
 		Motor_OutputAll();						// write 0 speed to all motors
 	}
 
@@ -342,6 +353,7 @@ void Motor_DrawDisplay(void)
         Motor_OutputAll();
 	}
 
+	// TODO motor diagnostics are working only if other firmware is flashed. in the current version of the firmware no i2c read connection feasible
 	/**
 	 * \brief	read one motor (non blocking)
 	 *
@@ -368,14 +380,14 @@ void Motor_DrawDisplay(void)
 			else
 				xEventGroupClearBits(gx_fault_EventGroup,fault_MOTOR_OVER_CURRENT);
 
-			i8_i2cReadNum = I2C_MODE_BUSY;
-			/*		I2CMRead(	&i2cMastInst_s, 										// pointer to i2c master instance
-								ESC_BASE_ADR + ui8_motorMap[ui8_motorNr], 				// I2C adress ### Adresse zum lesen ist eine andere wie zum schreiben!
-								(uint8_t *)& gs_motor[ui8_motorMap[i8_i2cWriteNum]].ui8_current, 	// I2C message
-								2, 														// message length
-								I2CReadFinishCallback, 										// callback funktion (when message was sent)
-								0);
-								*/												// callback data
+//			I2CMRead(&i2cMastInst_s, 										// pointer to i2c master instance
+//								ESC_BASE_ADR + ui8_motorMap[ui8_motorNr], 				// I2C adress ### Adresse zum lesen ist eine andere wie zum schreiben!
+//
+//								(uint8_t *)& gs_motor[ui8_motorMap[i8_i2cWriteNum]].ui8_current, 	// I2C message
+//								2, 														// message length
+//								I2CReadFinishCallback, 										// callback funktion (when message was sent)
+//								0);
+																				// callback data
 		}
 	}
 
@@ -416,15 +428,22 @@ void Motor_DrawDisplay(void)
 			gui32_motor_fault &= ~( 1 << ui8_motorMap[i8_i2cWriteNum] );
 		}
 
-		i8_i2cWriteNum++;  // increment motor Number to adress the next motor
+		// TODO change back to right motor control
+//		i8_i2cWriteNum++;  // increment motor Number to adress the next motor
+//		if(i8_i2cWriteNum<motor_COUNT)
+//		{
+//			I2CWriteSpeed(ui8_motorMap[i8_i2cWriteNum]);
+//		}
+		i8_i2cWriteNum += 3;
 		if(i8_i2cWriteNum<motor_COUNT)
 		{
-			I2CWriteSpeed(ui8_motorMap[i8_i2cWriteNum]);
+		    I2CWriteSpeed(ui8_motorMap[i8_i2cWriteNum]);
 		}
 		else // all motors have been updated
 		{
 			// I2C finish
 			i8_i2cWriteNum=I2C_MODE_READY;
+
 			HIDE_Workload_EstimateStop(p_workHandle);
 		}
 	}
@@ -441,7 +460,7 @@ void Motor_DrawDisplay(void)
 	static void I2CReadFinishCallback(void *pvData, uint_fast8_t ui8_status)
 	{
 		// over current at the motor?
-		if( gs_motor[ui8_motorMap[i8_i2cReadNum]].ui8_current >= MOTOR_OVER_CURRENT)
+		if( gs_motor[ui8_motorMap[i8_i2cReadNum]].f_current >= MOTOR_OVER_CURRENT)
 		{
 			// store motor has a over current
 			gui32_motor_overCurrent |= ( 1 << ui8_motorMap[i8_i2cReadNum] );
@@ -473,6 +492,8 @@ void Motor_DrawDisplay(void)
 	{
 		uint32_t ui32_speed = (uint32_t) gs_motor[ui8_motorNr].ui16_setPoint;	// speed in größere variiablen laden
 
+		ui16_motorDataUsb[ui8_motorNr] = ui32_speed;
+
 		// Wertebereich von 1000..2000us mappen auf
 		// bei mode:2047   -> 0..2047
 		// bei mode:255    -> 0..255
@@ -481,6 +502,9 @@ void Motor_DrawDisplay(void)
 
 
 		ui32_speed = (ui32_speed * ESC_DATA_SIZE) / 0xFFFF;  //0..2047 oder 0..255
+
+		// TODO delete later send motor data over USB
+		ui16_motorDataUsb[ui8_motorNr] = (uint16_t) ui32_speed;
 
 		if(ESC_DATA_SIZE == 255)
 		{
@@ -501,8 +525,9 @@ void Motor_DrawDisplay(void)
 		{
 			// brushless version >= 2.0
 			// Speed in 2 bytes (11bits) umwandeln
-			ui8_msg[0] = (uint8_t)(ui32_speed >> 3) & 0xff;
-			ui8_msg[1] = ((uint8_t)ui32_speed % 8) & 0x07;
+			ui8_msg[0] = (uint8_t)(ui32_speed >> 3) & 0xff; // gets the high byte [10->3]
+			ui8_msg[1] = ((uint8_t)ui32_speed % 8) & 0x07;  // gets the low 3 bits [3->0]
+
 			I2CMWrite(	&i2cMastInst_s, 					// pointer to i2c master instance
 						ESC_BASE_ADR + ui8_motorNr, 		// I2C adress
 						ui8_msg, 							// I2C message
@@ -512,9 +537,27 @@ void Motor_DrawDisplay(void)
 						#else
 							0,								// no callback funktion
 						#endif
-						0);									// callback data
+						0);
+
+												// callback data
+
 		}
 	}
+
+
+	void HIDE_Motor_SendDataOverUSB(void)
+	{
+
+
+
+
+	    // Send Motor Data over USB
+        HIDE_Debug_USB_InterfaceSend(ui16_motorDataUsb, sizeof(ui16_motorDataUsb)/sizeof(ui16_motorDataUsb[0]), debug_INT16);
+
+
+	}
+
+
 
 #elif ( setup_MOTOR_PWM == (setup_MOTOR&setup_MASK_OPT1) )
 

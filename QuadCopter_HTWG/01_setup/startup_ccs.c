@@ -65,7 +65,7 @@ extern void vPortSVCHandler(void);
 extern void xPortSysTickHandler(void);
 
 //extern void UARTStdioIntHandler(void);
-extern void SensorDriverI2CIntHandler(void);
+//extern void SensorDriverI2CIntHandler(void);
 extern void Dma_ErrorISR(void);
 
 //

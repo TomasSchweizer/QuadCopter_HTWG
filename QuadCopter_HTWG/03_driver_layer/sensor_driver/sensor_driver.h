@@ -41,6 +41,10 @@ extern void    HIDE_Sensor_SendDataOverUSB (void);
 /*					Global Variables							*/
 /* ------------------------------------------------------------ */
 
+extern volatile float gf_sensor_attitudeQuaternion[4];
+extern float gf_sensor_fusedAngles[3];
+extern float gf_sensor_pressure;
+extern float gf_sensor_altitude;
 /* ------------------------------------------------------------ */
 
 #endif // __SENSOR_DRIVER_H__

@@ -28,7 +28,7 @@
 //// define a highpass array structure
 //#define HP_A_STRUCT(name, alpha_val, size) struct hp_a_struct { float x[size]; float x_old[size]; float y[size]; const float alpha = alpha_val; } name;
 
-#define LP_ARRAY_SIZE 6
+#define LP_ARRAY_SIZE 3
 #define HP_ARRAY_SIZE 3
 
 /* Structs

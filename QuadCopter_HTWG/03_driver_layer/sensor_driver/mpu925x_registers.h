@@ -104,10 +104,12 @@
 
 #define MAGNET_CONTINUOUS_MODE1	0x02
 #define MAGNET_CONTINUOUS_MODE2	0x06
+#define MAGNET_FUSE_ROM_MODE    0x0F
+#define MAGNET_SEFL_TEST_MODE   0x08
 #define MAGNET_16_BIT_OUTPUT	0x10
 #define MAGNET_SRST				0x01
-#define MAGNET_SELFTEST_ON		0x40 // Generate magnetic field for self-test
-#define MAGNET_SELFTEST_OFF		0x00 // Normal mode (no self-test)
+#define MAGNET_SELFTEST_BIT_ON	0x40 // Generate magnetic field for self-test
+#define MAGNET_SELFTEST_BIT_OFF	0x00 // Normal mode (no self-test)
 
 // Add to MPU Register Adress to make a read access, otherwise data is written
 #define MPU_READ 0x80

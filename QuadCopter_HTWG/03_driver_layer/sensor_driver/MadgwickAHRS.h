@@ -2,30 +2,47 @@
 // MadgwickAHRS.h
 //=====================================================================================================
 //
-// Implementation of Madgwick's IMU and AHRS algorithms.
-// See: http://www.x-io.co.uk/node/8#open_source_ahrs_and_imu_algorithms
+// Implementation of Madgwick's AHRS algorithm.
 //
 // Date			Author          Notes
 // 29/09/2011	SOH Madgwick    Initial release
 // 02/10/2011	SOH Madgwick	Optimised for reduced CPU load
+// 06/12/2020   Tomas Schweizer Overall changes to fit to application HTWG-QC
 //
+// Source:
+// http://www.x-io.co.uk/node/8#open_source_ahrs_and_imu_algorithms
 //=====================================================================================================
-#ifndef MadgwickAHRS_h
-#define MadgwickAHRS_h
 
-//----------------------------------------------------------------------------------------------------
-// Variable declaration
+#ifndef __MADGWICKAHRS_H__
+#define __MADGWICKAHRS_H__
 
-extern volatile float beta;				// algorithm gain
-extern volatile float q0, q1, q2, q3;	// quaternion of sensor frame relative to auxiliary frame
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                     Include File Definitions                                       */
+/* ---------------------------------------------------------------------------------------------------*/
+#include <stdint.h>
 
-//---------------------------------------------------------------------------------------------------
-// Function declarations
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                      Defines                                                       */
+/* ---------------------------------------------------------------------------------------------------*/
 
-void MadgwickAHRSupdate(float gx, float gy, float gz, float ax, float ay, float az, float mx, float my, float mz);
-void MadgwickAHRSupdateIMU(float gx, float gy, float gz, float ax, float ay, float az);
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                      Type Definitions                                              */
+/* ---------------------------------------------------------------------------------------------------*/
 
-#endif
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                      Global Variables                                              */
+/* ---------------------------------------------------------------------------------------------------*/
+
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                      API Procedure Definitions                                     */
+/* ---------------------------------------------------------------------------------------------------*/
+extern void MadgwickAHRSupdate(float ax, float ay, float az,
+                               float gx, float gy, float gz,
+                               float mx, float my, float mz,
+                               volatile float q[4], float dt);
+
+#endif  // __MADGWICKAHRS_H__
+
 //=====================================================================================================
 // End of file
 //=====================================================================================================

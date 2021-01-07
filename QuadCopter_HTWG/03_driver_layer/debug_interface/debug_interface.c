@@ -15,14 +15,11 @@
 
 //  Hardware Specific
 #include "inc/hw_memmap.h"
-
-#include "driverlib/usb.h"
 #include "driverlib/gpio.h"
 #include "driverlib/pin_map.h"
 #include "driverlib/uart.h"
 #include "driverlib/sysctl.h"
 #include "driverlib/rom.h"
-#include "driverlib/usb.h"
 #include "utils/uartstdio.h"
 // TODO USB new includes test
 
@@ -38,10 +35,14 @@
 // setup
 #include "qc_setup.h"
 #include "peripheral_setup.h"
+#include "prioritys.h"
 
 // drivers
 #include "debug_interface.h"
-#include "math_quaternion.h"
+
+// utils
+#include "qc_math.h"
+
 
 
 /* ------------------------------------------------------------ */
@@ -89,7 +90,7 @@
 	   // Use the internal 16MHz oscillator as the UART clock source.
 		UARTClockSourceSet(periph_DEBUG_UART_BASE, UART_CLOCK_PIOSC);
 
-		// Init des UART  115200
+		// Init des UART  9600
 		UARTStdioConfig(0, 9600, 16000000);
 
 		// Enable 16x8Bit FIFO
@@ -106,7 +107,11 @@
 	 */
 	void HIDE_Debug_InterfaceGet(int32_t* i32_buff)
 	{
-		*i32_buff = UARTCharGetNonBlocking(periph_DEBUG_UART_BASE);
+
+
+        *i32_buff = UARTCharGetNonBlocking(periph_DEBUG_UART_BASE);
+
+
 	}
 
 	/**
@@ -144,12 +149,14 @@
 	    #define TRACE_SYSCTL_PERIPH_GPIO_USB    SYSCTL_PERIPH_GPIOD
         #define TRACE_GPIO_PORT_BASE_USB        GPIO_PORTD_BASE
         #define TRACE_GPIO_PINS_USB_ANALOG   (GPIO_PIN_4 | GPIO_PIN_5)
+        #define periph_USB_INT                  INT_USB0
     #else
         #error ERROR: define setup_DEBUG (in qc_setup.h)
     #endif
 
 	static bool b_USBDeviceConnected = false;
-	//static volatile ui32_TXTransmitCounter = 0;
+	static volatile uint32_t ui32_RXTransmitCounter = 0;
+
 
 	/* ------------------------------------------------------------ */
     /*              Procedure Definitions                           */
@@ -161,6 +168,8 @@
      */
 	void HIDE_Debug_USB_InterfaceInit(void)
 	{
+
+
 	    // Enable the GPIO peripheral used for USB, and configure the USB pins.
         SysCtlPeripheralEnable(TRACE_SYSCTL_PERIPH_GPIO_USB);
         GPIOPinTypeUSBAnalog(TRACE_GPIO_PORT_BASE_USB, TRACE_GPIO_PINS_USB_ANALOG);
@@ -174,6 +183,9 @@
 
         // Pass our device information to the USB library and place the device on the bus.
         USBDBulkInit(0, &g_sBulkDevice);
+
+        // Important to set USB interrupt priority lower than I2C (Motor/Sensor interrupt)
+        ROM_IntPrioritySet(periph_USB_INT,    priority_USB_ISR);
 
 	}
 
@@ -204,9 +216,6 @@
             k = 0;
             ui8_txArraySend[k] = ui8_txDataType;
             k++;
-
-
-
 
             switch(ui8_txDataType){
 
@@ -295,7 +304,7 @@
 	    int i;
 	    for(i = 0; i < sizeof(ui8_txArraySend); i++){
 	       g_pui8USBTxBuffer[ui32_WriteIndex] = ui8_txArraySend[i];
-	       ui32_WriteIndex = increment(ui32_WriteIndex, BULK_BUFFER_SIZE);
+	       ui32_WriteIndex = increment2Limit(ui32_WriteIndex, BULK_BUFFER_SIZE);
 	    }
 
 	    // indicates that the client has written data in the transmit buffer and wants to transmit it
@@ -303,6 +312,34 @@
 
 
 
+
+	}
+
+	// TODO Receive PID values
+	void HIDE_Debug_USB_InterfaceReceive(uint8_t pid_values_buffer[14]){
+
+	    uint32_t ui32_readIndex;
+	    tUSBRingBufObject sRxRing;
+
+
+	    if(g_pui8USBRxBuffer[0] == 115 && ui32_RXTransmitCounter == 3)
+	    {
+
+
+	        ui32_RXTransmitCounter = 0;
+
+	        USBBufferInfoGet(&g_sRxBuffer, &sRxRing);
+	        ui32_readIndex = sRxRing.ui32ReadIndex;
+
+	        int i;
+            for(i = 0; i < 14; i++){
+
+                pid_values_buffer[i] = g_pui8USBRxBuffer[ui32_readIndex];
+                ui32_readIndex = increment2Limit(ui32_readIndex, BULK_BUFFER_SIZE);
+            }
+            USBBufferDataRemoved(&g_sRxBuffer, 14);
+
+         }
 
 	}
 
@@ -386,7 +423,10 @@
 	        //
 	        case USB_EVENT_RX_AVAILABLE:
 	        {
-
+	            ui32_RXTransmitCounter++;
+	            if(ui32_RXTransmitCounter > 3)
+	                USBBufferFlush(&g_sRxBuffer);
+	            break;
 	        }
 
 	        //

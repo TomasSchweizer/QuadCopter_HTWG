@@ -26,7 +26,7 @@
 #include "display_driver.h"
 
 // application
-#include "flight_control.h"
+#include "flight_control.h" // TODO changed for own PID controller test
 #include "flight_task.h"
 #include "receiver_task.h"		// GetSetPoints
 #include "fault.h"
@@ -117,8 +117,16 @@ static void FlightTaskDrawDisplay(void)
 	const uint8_t yOffset 		= 52;
 	const uint8_t xOffset 		= 55;
 	u8g_SetFont(&gs_display, u8g_font_04b_03r);		// u8g_font_unifont
-	if(ge_flight_state == RESTING)
-		u8g_DrawStr(&gs_display,xOffset,yOffset,"RESTING");
+	if(ge_flight_state == RESTING){
+
+		if(Sensor_IsCalibrateRequired()){
+		    u8g_DrawStr(&gs_display,xOffset, yOffset,"CALIBRATE");
+		}
+		else
+		{
+		    u8g_DrawStr(&gs_display,xOffset,yOffset,"RESTING");
+		}
+	}
 	else if(ge_flight_state == LANDING)
 		u8g_DrawStr(&gs_display,xOffset,yOffset,"LANDING");
 	else if(ge_flight_state == FLYING)
@@ -166,8 +174,6 @@ uint32_t FlightTask_Init(void)
  */
 static void FlightTask(void *pvParameters)
 {
-
-
 
 	Motor_InitMotor();
 	Sensor_InitSensor();
@@ -286,6 +292,9 @@ static void StateFlying(EventBits_t x_faultEventBits)
 	Control_Mixer();
 
 	Motor_OutputAll();
+
+
+
 }
 
 /**
@@ -325,6 +334,7 @@ static void StateLanding(EventBits_t x_faultEventBits)
 		Control_FlightStabilisation();
 		Control_Mixer();
 		Motor_OutputAll();
+
 	}
 
 }
@@ -343,10 +353,14 @@ static void StateResting(void)
            Sensor_CalibrateStop();
        }
     }
-
     else
+    {
+        //TODO delete later besides Sensor_ReadFusion just for pID lib tests
+        ReceiverTask_GetSetPoints(&gf_flight_setPoint[0]);
         Sensor_ReadAndFusion();
-
+        Control_FlightStabilisation();
+        Control_Mixer();
+    }
 	Motor_StopAll();
 }
 

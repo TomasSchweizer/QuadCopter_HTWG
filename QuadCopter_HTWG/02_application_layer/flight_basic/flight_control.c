@@ -16,6 +16,7 @@
 #include "sensor_driver.h"
 #include "motor_driver.h"
 #include "debug_interface.h"
+#include "display_driver.h"
 
 // utils
 #include "qc_math.h"
@@ -34,9 +35,9 @@
 #define PID_I 							0.0f
 #define PID_D 							0.0f
 #define THR_SCALE						0.8f		// [%]
-#define dt 								0.002f		// [s]
+#define dt   						    0.002f		// [s]
 #define YAW_MAX_INF						(1.0f/(15.0f*M_PI/180.0f))
-#define MIX(X,Y,Z) 						(gf_flight_setPoint[flight_THROTTLE]*THR_SCALE + pid_out[flight_ROLL]*X + pid_out[flight_PITCH]*Y + pid_out[flight_YAW]*Z)
+#define MIX(X,Y,Z) 						(gf_flight_setPoint[flight_THROTTLE]*THR_SCALE + f_pidOut[flight_ROLL]*X + f_pidOut[flight_PITCH]*Y + f_pidOut[flight_YAW]*Z)
 
 /* ------------------------------------------------------------ */
 /*				Local Type Definitions							*/
@@ -46,57 +47,64 @@
 /*				Forward Declarations							*/
 /* ------------------------------------------------------------ */
 
-void Control_FlightStabilisation(void);
-void Control_Mixer(void);
-void Control_MotorSameSetPoint(uint16_t ui16_setPoint);
-
 /* ------------------------------------------------------------ */
 /*				Global Variables								*/
 /* ------------------------------------------------------------ */
-
-math_pidController_s s_pidRoll = {
-		.f_sampleTime = dt,
-		.f_kP		  =math_RAD2NORM(PID_P),
-		.f_kI		  =PID_I,
-		.f_kD		  =PID_D,
-		.f_maxOut	  =0.3f,
-		.f_minOut	  =-0.3f,
-		.f_intSigOld  =0.0f,
-		.i8_clamping  =0
-};
-
-math_pidController_s s_pidPitch = {
-		.f_sampleTime = dt,
-		.f_kP		  =math_RAD2NORM(PID_P),
-		.f_kI		  =PID_I,
-		.f_kD		  =PID_D,
-		.f_maxOut	  =0.3f,
-		.f_minOut	  =-0.3f,
-		.f_intSigOld  =0.0f,
-		.i8_clamping  =0
-};
-
-math_pidController_s s_pidYaw = {
-		.f_sampleTime = dt,
-		.f_kP		  =0.0f,
-		.f_kI		  =0.0f,
-		.f_kD		  =0.0f,
-		.f_maxOut	  =0.3f,
-		.f_minOut	  =-0.3f,
-		.f_intSigOld  =0.0f,
-		.i8_clamping  =0
-};
-
-// used global variables
-extern volatile uint32_t 	gui32_flight_setPoint[4];
+extern float gf_flight_setPoint[4];
 extern float gf_sensor_fusedAngles[3];
 extern volatile motor_Data_s gs_motor[motor_COUNT];
 
 /* ------------------------------------------------------------ */
 /*				Local Variables									*/
 /* ------------------------------------------------------------ */
+static float f_pidLastInputs[4] = {0.0, 0.0, 0.0, 0.0};
+static float f_pidOutputSum[4] = {0.0, 0.0, 0.0, 0.0};
+static float f_pidOut[4] = {0.0, 0.0, 0.0, 0.0} ;
 
-static float pid_out[3];
+static math_pidController_s s_pidRoll = {
+
+    .pf_input       =   &gf_sensor_fusedAngles[flight_ROLL],
+    .pf_output      =   &f_pidOut[flight_ROLL],
+    .pf_setPoint    =   &gf_flight_setPoint[flight_ROLL],
+    .pf_lastInput   =   &f_pidLastInputs[flight_ROLL],
+    .pf_outputSum   =   &f_pidOutputSum[flight_ROLL],
+    .f_kP           =   math_RAD2NORM(PID_P),
+    .f_kI           =   PID_I * dt,
+    .f_kD           =   PID_D / dt,
+    .cf_maxOut      =   0.3f,
+    .cf_minOut      =   -0.3f,
+    .cf_sampleTime  =   dt
+};
+
+static math_pidController_s s_pidPitch = {
+
+    .pf_input       =   &gf_sensor_fusedAngles[flight_PITCH],
+    .pf_output      =   &f_pidOut[flight_PITCH],
+    .pf_setPoint    =   &gf_flight_setPoint[flight_PITCH],
+    .pf_lastInput   =   &f_pidLastInputs[flight_PITCH],
+    .pf_outputSum   =   &f_pidOutputSum[flight_PITCH],
+    .f_kP           =   math_RAD2NORM(PID_P),
+    .f_kI           =   PID_I * dt,
+    .f_kD           =   PID_D / dt,
+    .cf_maxOut      =   0.3f,
+    .cf_minOut      =   -0.3f,
+    .cf_sampleTime  =   dt
+};
+
+static math_pidController_s s_pidYaw = {
+
+    .pf_input       =   &gf_sensor_fusedAngles[flight_YAW],
+    .pf_output      =   &f_pidOut[flight_YAW],
+    .pf_setPoint    =   &gf_flight_setPoint[flight_YAW],
+    .pf_lastInput   =   &f_pidLastInputs[flight_YAW],
+    .pf_outputSum   =   &f_pidOutputSum[flight_YAW],
+    .f_kP           =   math_RAD2NORM(PID_P),
+    .f_kI           =   PID_I * dt,
+    .f_kD           =   PID_D / dt,
+    .cf_maxOut      =   0.3f,
+    .cf_minOut      =   -0.3f,
+    .cf_sampleTime  =   dt
+};
 
 /* ------------------------------------------------------------ */
 /*				Procedure Definitions							*/
@@ -105,10 +113,10 @@ static float pid_out[3];
 #if( setup_DEV_PID_TUNE ) || DOXYGEN
 	union {
 		float f[3];
-		char c[12];
+		uint8_t ui8[12];
 	} pid_values;
 
-	/**
+	/** TODO outdated
 	 * \brief	Function for receiving pid parameters via uart
 	 * \note	to enable this HIDE function set setup_DEV_PID_TUNE in qc_setup.h
 	 */
@@ -117,12 +125,13 @@ static float pid_out[3];
 		int32_t temp_received=0;
 		volatile uint32_t i = 0;
 
+
 		while(i<12)
 		{
 			HIDE_Debug_InterfaceGet(& temp_received);
 			if (temp_received != -1)
 			{
-				pid_values.c[i] = (uint8_t)temp_received;
+				pid_values.ui8[i] = (uint8_t)temp_received;
 				i++;
 			}
 			else
@@ -133,14 +142,105 @@ static float pid_out[3];
 		// when all is received, write values
 		if (i==12){
 			i = 0;
-			s_pidRoll.f_kP 	= math_RAD2NORM(pid_values.f[0]);
-			s_pidPitch.f_kP = math_RAD2NORM(pid_values.f[0]);
-			s_pidRoll.f_kI 	= pid_values.f[1];
-			s_pidPitch.f_kI = pid_values.f[1];
-			s_pidRoll.f_kD 	= pid_values.f[2];
-			s_pidPitch.f_kD = pid_values.f[2];
+			s_pidRoll.f_kP 	= math_RAD2NORM(pid_values.f[flight_ROLL]);
+			s_pidPitch.f_kP = math_RAD2NORM(pid_values.f[flight_PITCH]);
+			s_pidRoll.f_kI 	= pid_values.f[flight_ROLL] * dt;
+			s_pidPitch.f_kI = pid_values.f[flight_PITCH] * dt;
+			s_pidRoll.f_kD 	= pid_values.f[flight_ROLL] / dt;
+			s_pidPitch.f_kD = pid_values.f[flight_PITCH] / dt;
 		}
 	}
+
+	void HIDE_Control_Debug_USB_GetPID(void)
+	{
+
+	    uint8_t pid_temp[14];
+
+	    HIDE_Debug_USB_InterfaceReceive(pid_temp);
+
+	    if(pid_temp[0] == 115){
+
+            int i;
+            for(i = 0; i < 12; i++){
+
+                pid_values.ui8[i] = pid_temp[i+2];
+            }
+
+            // To Limit insane PID tune values TODO maybe adjust later
+            for(i = 0; i < 3; i++){
+
+                pid_values.f[i] = math_LIMIT(pid_values.f[i], 0.0, 10.0);
+
+            }
+
+            if(pid_temp[1] == 'r'){
+                s_pidRoll.f_kP = math_RAD2NORM(pid_values.f[0]);
+                s_pidRoll.f_kI  = pid_values.f[1] * dt;
+                s_pidRoll.f_kD  = pid_values.f[2] / dt;
+            }
+            else if(pid_temp[1] == 'p'){
+                s_pidPitch.f_kP = math_RAD2NORM(pid_values.f[0]);
+                s_pidPitch.f_kI  = pid_values.f[1] * dt;
+                s_pidPitch.f_kD  = pid_values.f[2] / dt;
+            }
+            else if(pid_temp[1] == 'y'){
+                s_pidYaw.f_kP = math_RAD2NORM(pid_values.f[0]);
+                s_pidYaw.f_kI  = pid_values.f[1] * dt;
+                s_pidYaw.f_kD  = pid_values.f[2] / dt;
+            }
+            else{
+
+                // wrong USB values
+                s_pidRoll.f_kP = math_RAD2NORM(1.0);
+                s_pidRoll.f_kI  = 0.0;
+                s_pidRoll.f_kD  = 0.0;
+                s_pidPitch.f_kP = math_RAD2NORM(1.0);
+                s_pidPitch.f_kI  = 0.0;
+                s_pidPitch.f_kD  = 0.0;
+                s_pidYaw.f_kP = math_RAD2NORM(1.0);
+                s_pidYaw.f_kI  = 0.0;
+                s_pidYaw.f_kD  = 0.0;
+
+            }
+	    }
+
+	}
+
+    void HIDE_Control_PID_TUNE_DrawDisplay(void)
+    {
+        const uint8_t yOffset   = 32;
+        const uint8_t xOffset   = 58;
+
+        u8g_SetFont(&gs_display, u8g_font_04b_03r);     // u8g_font_unifont
+
+        // Roll PID controller
+        u8g_DrawStr(&gs_display,xOffset,      yOffset + 0,"Ro:");
+        u8g_DrawStr(&gs_display,xOffset+14,      yOffset + 0,"P:");
+        u8g_DrawStr(&gs_display,xOffset+18,   yOffset + 0,u8g_8toa((int8_t) math_NORM2RAD(s_pidRoll.f_kP),2));
+        u8g_DrawStr(&gs_display,xOffset+32,      yOffset + 0,"I:");
+        u8g_DrawStr(&gs_display,xOffset+36,   yOffset + 0,u8g_8toa((int8_t) s_pidRoll.f_kI,2));
+        u8g_DrawStr(&gs_display,xOffset+52,      yOffset + 0,"D:");
+        u8g_DrawStr(&gs_display,xOffset+56,   yOffset + 0,u8g_8toa((int8_t) s_pidRoll.f_kD,2));
+
+        // Pitch PID controller
+        u8g_DrawStr(&gs_display,xOffset,      yOffset + 6,"Pi:");
+        u8g_DrawStr(&gs_display,xOffset+14,      yOffset + 6,"P:");
+        u8g_DrawStr(&gs_display,xOffset+18,   yOffset + 6,u8g_8toa((int8_t) math_NORM2RAD(s_pidPitch.f_kP),2));
+        u8g_DrawStr(&gs_display,xOffset+32,      yOffset + 6,"I:");
+        u8g_DrawStr(&gs_display,xOffset+36,   yOffset + 6,u8g_8toa((int8_t) s_pidPitch.f_kI,2));
+        u8g_DrawStr(&gs_display,xOffset+52,      yOffset + 6,"D:");
+        u8g_DrawStr(&gs_display,xOffset+56,   yOffset + 6,u8g_8toa((int8_t) s_pidPitch.f_kD,2));
+
+        // Yaw PID controller
+        u8g_DrawStr(&gs_display,xOffset,      yOffset + 12,"Ya:");
+        u8g_DrawStr(&gs_display,xOffset+14,      yOffset + 12,"P:");
+        u8g_DrawStr(&gs_display,xOffset+18,   yOffset + 12,u8g_8toa((int8_t) math_NORM2RAD(s_pidYaw.f_kP),2));
+        u8g_DrawStr(&gs_display,xOffset+32,      yOffset + 12,"I:");
+        u8g_DrawStr(&gs_display,xOffset+36,   yOffset + 12,u8g_8toa((int8_t) s_pidYaw.f_kI,2));
+        u8g_DrawStr(&gs_display,xOffset+52,      yOffset + 12,"D:");
+        u8g_DrawStr(&gs_display,xOffset+56,   yOffset + 12,u8g_8toa((int8_t) s_pidYaw.f_kD,2));
+
+    }
 #endif
 
 /**
@@ -148,25 +248,42 @@ static float pid_out[3];
  */
 void Control_Reset(void)
 {
-	s_pidRoll. f_intSigOld=0.0f;
-	s_pidPitch.f_intSigOld=0.0f;
-	s_pidYaw.  f_intSigOld=0.0f;
-	s_pidRoll. f_output   =0.0f;
-	s_pidPitch.f_output   =0.0f;
-	s_pidYaw.  f_output   =0.0f;
+    uint8_t i;
+	for(i=0; i<4; i++)
+	{
+	    f_pidLastInputs[i] = 0.0;
+	    f_pidOutputSum [i] = 0.0;
+	    f_pidOut[i] = 0.0;
+	}
 }
+
+
 
 /**
  * \brief	Do control algorithm to stabilisate the QC
  */
+
+
 void Control_FlightStabilisation(void)
 {
-	s_pidRoll.f_error =gf_flight_setPoint[flight_ROLL]  - gf_sensor_fusedAngles[flight_ROLL];
-	s_pidPitch.f_error=gf_flight_setPoint[flight_PITCH] - gf_sensor_fusedAngles[flight_PITCH];
+    //float w_yaw;
 
-	pid_out[flight_ROLL]   = Math_StepPidController(&s_pidRoll);
-	pid_out[flight_PITCH]  = Math_StepPidController(&s_pidPitch);
-	pid_out[flight_YAW]	= 0.0f;//-gf_flight_setPoint[flight_YAW]*YAW_MAX_INF/2.0f;	###
+    //w_yaw = (gf_sensor_fusedAngles[flight_YAW] - fused_yaw_angle_old) / dt;
+    //fused_yaw_angle_old = gf_sensor_fusedAngles[flight_YAW];
+
+
+//
+//    s_pidRoll.f_error =gf_flight_setPoint[flight_ROLL]  - gf_sensor_fusedAngles[flight_ROLL];
+//    s_pidPitch.f_error=gf_flight_setPoint[flight_PITCH] - gf_sensor_fusedAngles[flight_PITCH];
+//    //s_pidYaw.f_error=gf_flight_setPoint[flight_YAW] - w_yaw;
+//
+//    pid_out[flight_ROLL]   = Math_StepPidController(&s_pidRoll);
+//    pid_out[flight_PITCH]  = Math_StepPidController(&s_pidPitch);
+//    //pid_out[flight_YAW] =   Math_StepPidController(&s_pidYaw);
+//    pid_out[flight_YAW] = 0.0;
+
+
+    Math_StepPidController(&s_pidRoll);
 }
 
 /**
@@ -180,10 +297,10 @@ void Control_Mixer(void)
 	float motor[4];
 
 	//				R      P     Y
-	motor[0] = MIX(+1.0f,-1.0f,-1.0f); //Motor VL
-	motor[1] = MIX(+1.0f,+1.0f,+1.0f); //Motor HL
-	motor[2] = MIX(-1.0f,-1.0f,+1.0f); //Motor VR
-	motor[3] = MIX(-1.0f,+1.0f,-1.0f); //Motor HR
+	motor[0] = MIX(+1.0f,+1.0f,-1.0f); //Motor VL
+	motor[1] = MIX(+1.0f,-1.0f,+1.0f); //Motor HL
+	motor[2] = MIX(-1.0f,+1.0f,+1.0f); //Motor VR
+	motor[3] = MIX(-1.0f,-1.0f,-1.0f); //Motor HR
 
 	for(i=0;i<4;++i)
 	{
@@ -217,3 +334,4 @@ void Control_MotorSameSetPoint(uint16_t ui16_setPoint)
 		gs_motor[i].ui16_setPoint = ui16_setPoint;
 
 }
+
