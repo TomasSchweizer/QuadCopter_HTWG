@@ -25,7 +25,8 @@
 // drivers
 #include "remote_control.h"
 #include "sensor_driver.h"		// to require sensor calibration
-#include <display_driver.h>
+#include "display_driver.h"
+#include "debug_interface.h"
 
 // application
 #include "flight_task.h"
@@ -98,6 +99,7 @@ float gf_receiver_setPoint[4];
 /* ------------------------------------------------------------ */
 
 countEdges_handle_p p_receive_coundEdges;
+static uint8_t ui8_calibrateRemoteAtStartFlag = 1;
 
 /* ------------------------------------------------------------ */
 /*				Procedure Definitions							*/
@@ -131,6 +133,7 @@ uint32_t ReceiverTask_Init(void)
 	HIDE_Display_InsertDrawFun(ReceiverTask_DrawDisplay);
 
 	#if	( setup_DEV_SUM_RECEIVS )
+	    HIDE_Display_InsertDrawFun(HIDE_Receive_DrawDisplay);
 		p_receive_coundEdges=CountEdges_Create(receiver_COUNT);
 		if( p_receive_coundEdges == math_NULL )
 			return(true);
@@ -199,8 +202,9 @@ static void ReceiverTask(void *pvParameters)
 	    	if( INPUT_REMOTE_CONTROL & gui32_receiver_flightStabInput )
 	    	{
 	    		// get data, is calibration required? & is the flight_state RESTING?
-	    		if(RemoteControl_GetData(& gf_receiver_setPoint[0]) && ge_flight_state==RESTING)
+	    		if((RemoteControl_GetData(&gf_receiver_setPoint[0]) && ge_flight_state==RESTING) || ui8_calibrateRemoteAtStartFlag)
 	    		{
+	    		    ui8_calibrateRemoteAtStartFlag = 0;
 	    			RemoteControl_Calibrate();		// calibrate remote control
 	    			Sensor_CalibrateRequire();		// require calibration for sensor (flight_task will do calibration algorithm)
 	    		}

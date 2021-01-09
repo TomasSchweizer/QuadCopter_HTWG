@@ -77,7 +77,7 @@ static uint16_t ui16_counterStartUpConvergence = 0;
  *  \param  dt        ->       sample time [0.002ms normaly]
  *
  */
-void MadgwickAHRSupdate(float ax, float ay, float az, float gx, float gy, float gz, float mx, float my, float mz, volatile float q[4], float dt)
+void MadgwickAHRSupdate(float ax, float ay, float az, float gx, float gy, float gz, float mx, float my, float mz, volatile float q[4], volatile float qDot[4], float dt)
 {
    float beta;
 
@@ -167,6 +167,12 @@ void MadgwickAHRSupdate(float ax, float ay, float az, float gx, float gy, float 
    qDot2 = 0.5f * (q1 * gx + q3 * gz - q4 * gy) - beta * s2;
    qDot3 = 0.5f * (q1 * gy - q2 * gz + q4 * gx) - beta * s3;
    qDot4 = 0.5f * (q1 * gz + q2 * gy - q3 * gx) - beta * s4;
+
+   // Copy qDot into global variable to use a angular velocity
+   qDot[0] = qDot1;
+   qDot[1] = qDot2;
+   qDot[2] = qDot3;
+   qDot[3] = qDot4;
 
    // Integrate to yield quaternion
    q1 += qDot1 * dt;

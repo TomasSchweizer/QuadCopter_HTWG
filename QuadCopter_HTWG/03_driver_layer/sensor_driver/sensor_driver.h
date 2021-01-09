@@ -42,7 +42,9 @@ extern void    HIDE_Sensor_SendDataOverUSB (void);
 /* ------------------------------------------------------------ */
 
 extern volatile float gf_sensor_attitudeQuaternion[4];
+extern volatile float gf_sensor_dotAttitudeQuaternion[4];
 extern float gf_sensor_fusedAngles[3];
+extern float gf_sensor_angularVelocity[3];
 extern float gf_sensor_pressure;
 extern float gf_sensor_altitude;
 /* ------------------------------------------------------------ */

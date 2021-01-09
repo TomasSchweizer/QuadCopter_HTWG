@@ -24,15 +24,17 @@
 #include "motor_driver.h"
 #include "sensor_driver.h"
 #include "display_driver.h"
+#include "debug_interface.h"
 
 // application
-#include "flight_control.h" // TODO changed for own PID controller test
+#include "flight_control.h"
 #include "flight_task.h"
 #include "receiver_task.h"		// GetSetPoints
-#include "fault.h"
+
 
 // utils
 #include "workload.h"
+#include "fault.h"
 #include "qc_math.h"
 
 // setup
@@ -146,8 +148,16 @@ uint32_t FlightTask_Init(void)
 	HIDE_Display_InsertDrawFun(FlightTaskDrawDisplay);
 	Sensor_InitPeriph();
 	HIDE_Display_InsertDrawFun(Sensor_DrawDisplay);
+	HIDE_Debug_USB_InsertComFun(HIDE_Sensor_SendDataOverUSB, 1);
     Motor_InitPeriph();
 	HIDE_Display_InsertDrawFun(Motor_DrawDisplay);
+	HIDE_Debug_USB_InsertComFun(HIDE_Motor_SendDataOverUSB, 0);
+
+	// insert pid
+    #if( setup_DEV_PID_TUNE )
+	HIDE_Debug_USB_InsertComFun(HIDE_Control_Debug_USB_GetPID, 0);
+	HIDE_Display_InsertDrawFun(HIDE_Control_PID_TUNE_DrawDisplay);
+    #endif
 
     TaskHandle_t  x_TaskHandle;
 	// Create the flight task.
@@ -356,10 +366,10 @@ static void StateResting(void)
     else
     {
         //TODO delete later besides Sensor_ReadFusion just for pID lib tests
-        ReceiverTask_GetSetPoints(&gf_flight_setPoint[0]);
+        //ReceiverTask_GetSetPoints(&gf_flight_setPoint[0]);
         Sensor_ReadAndFusion();
-        Control_FlightStabilisation();
-        Control_Mixer();
+        //Control_FlightStabilisation();
+        //Control_Mixer();
     }
 	Motor_StopAll();
 }

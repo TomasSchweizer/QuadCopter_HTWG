@@ -42,6 +42,7 @@
 
 // utils
 #include "qc_math.h"
+#include "link_functions.h"
 
 
 
@@ -154,8 +155,12 @@
         #error ERROR: define setup_DEBUG (in qc_setup.h)
     #endif
 
+	static linkFun_handle_p p_debugUSBLinkFunHandle = 0;
 	static bool b_USBDeviceConnected = false;
 	static volatile uint32_t ui32_RXTransmitCounter = 0;
+
+	uint32_t TxHandler(void *pvCBData, uint32_t ui32Event, uint32_t ui32MsgValue, void *pvMsgData);
+	uint32_t RxHandler(void *pvCBData, uint32_t ui32Event, uint32_t ui32MsgValue, void *pvMsgData);
 
 
 	/* ------------------------------------------------------------ */
@@ -186,6 +191,27 @@
 
         // Important to set USB interrupt priority lower than I2C (Motor/Sensor interrupt)
         ROM_IntPrioritySet(periph_USB_INT,    priority_USB_ISR);
+
+	}
+
+	// run all usb commands
+	void HIDE_Debug_USB_Com(void){
+
+	    LinkFun_RunAllFun(p_debugUSBLinkFunHandle);
+	}
+
+	// insert USB send function
+	void HIDE_Debug_USB_InsertComFun(usb_com_fp fp_com, uint8_t insert){
+
+
+	    if(fp_com!=0)
+	    {
+	        if(insert == 1)
+	        {
+	            LinkFun_Insert(&p_debugUSBLinkFunHandle, fp_com); // link into usb com list
+	        }
+	    }
+
 
 	}
 

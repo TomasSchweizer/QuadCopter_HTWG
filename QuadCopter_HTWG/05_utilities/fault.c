@@ -92,7 +92,7 @@ uint32_t Fault_Init(void)
     	xEventGroupSetBits(gx_fault_EventGroup, 0xFFFFFF );		// all fault bits are set by default
 
 	#if	( setup_DEV_SUM_FAULTS )
-		gp_fault_coundEdges=CountEdges_Create(fault_COUNT);
+		gp_fault_coundEdges = CountEdges_Create(fault_COUNT);
 		if( gp_fault_coundEdges == math_NULL )
 			return(true);
 	#endif

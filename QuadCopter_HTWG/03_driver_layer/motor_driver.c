@@ -259,7 +259,7 @@ void Motor_DrawDisplay(void)
 
 		// init i2c master module
 		// und den i2c speed
-		ROM_I2CMasterInitExpClk(i2cMastInst_s.ui32Base, ROM_SysCtlClockGet(), ESC_I2C_SPEED);
+		ROM_I2CMasterInitExpClk(i2cMastInst_s.ui32Base, ROM_SysCtlClockGet(), true);
 
 		// enable interrupts
 		ROM_IntEnable(i2cMastInst_s.ui8Int);
@@ -366,19 +366,19 @@ void Motor_DrawDisplay(void)
 	 */
 	void Motor_Read(uint8_t ui8_motorNr)
 	{
-		if (i8_i2cReadNum != I2C_MODE_READY)
-		{
-			// this should never happen!
-			// you come here, when you want to read a Motor and the last read command is not finished.
-			while(1);
-		}
-		else
-		{
-			// if any motor has over current, set EventBit for over current
-			if(gui32_motor_overCurrent)
-				xEventGroupSetBits(gx_fault_EventGroup,fault_MOTOR_OVER_CURRENT);
-			else
-				xEventGroupClearBits(gx_fault_EventGroup,fault_MOTOR_OVER_CURRENT);
+//		if (i8_i2cReadNum != I2C_MODE_READY)
+//		{
+//			// this should never happen!
+//			// you come here, when you want to read a Motor and the last read command is not finished.
+//			while(1);
+//		}
+//		else
+//		{
+//			// if any motor has over current, set EventBit for over current
+//			if(gui32_motor_overCurrent)
+//				xEventGroupSetBits(gx_fault_EventGroup,fault_MOTOR_OVER_CURRENT);
+//			else
+//				xEventGroupClearBits(gx_fault_EventGroup,fault_MOTOR_OVER_CURRENT);
 
 //			I2CMRead(&i2cMastInst_s, 										// pointer to i2c master instance
 //								ESC_BASE_ADR + ui8_motorMap[ui8_motorNr], 				// I2C adress ### Adresse zum lesen ist eine andere wie zum schreiben!
@@ -388,7 +388,7 @@ void Motor_DrawDisplay(void)
 //								I2CReadFinishCallback, 										// callback funktion (when message was sent)
 //								0);
 																				// callback data
-		}
+//		}
 	}
 
 	/**
@@ -434,7 +434,7 @@ void Motor_DrawDisplay(void)
 //		{
 //			I2CWriteSpeed(ui8_motorMap[i8_i2cWriteNum]);
 //		}
-		i8_i2cWriteNum += 3;
+		i8_i2cWriteNum++;
 		if(i8_i2cWriteNum<motor_COUNT)
 		{
 		    I2CWriteSpeed(ui8_motorMap[i8_i2cWriteNum]);
@@ -481,7 +481,7 @@ void Motor_DrawDisplay(void)
 	 */
 	void Motor_I2CIntHandler(void)
 	{
-		I2CMIntHandler(&i2cMastInst_s);
+//		I2CMIntHandler(&i2cMastInst_s);
 	}
 
 	/**
@@ -492,6 +492,7 @@ void Motor_DrawDisplay(void)
 	{
 		uint32_t ui32_speed = (uint32_t) gs_motor[ui8_motorNr].ui16_setPoint;	// speed in größere variiablen laden
 
+		// TODO just for usb debugging
 		ui16_motorDataUsb[ui8_motorNr] = ui32_speed;
 
 		// Wertebereich von 1000..2000us mappen auf
@@ -527,7 +528,7 @@ void Motor_DrawDisplay(void)
 			// Speed in 2 bytes (11bits) umwandeln
 			ui8_msg[0] = (uint8_t)(ui32_speed >> 3) & 0xff; // gets the high byte [10->3]
 			ui8_msg[1] = ((uint8_t)ui32_speed % 8) & 0x07;  // gets the low 3 bits [3->0]
-
+			while(I2CMasterBusy(MOTOR_I2C_PERIPH_BASE));
 			I2CMWrite(	&i2cMastInst_s, 					// pointer to i2c master instance
 						ESC_BASE_ADR + ui8_motorNr, 		// I2C adress
 						ui8_msg, 							// I2C message
@@ -538,7 +539,7 @@ void Motor_DrawDisplay(void)
 							0,								// no callback funktion
 						#endif
 						0);
-
+			while(I2CMasterBusy(MOTOR_I2C_PERIPH_BASE));
 												// callback data
 
 		}
@@ -547,13 +548,8 @@ void Motor_DrawDisplay(void)
 
 	void HIDE_Motor_SendDataOverUSB(void)
 	{
-
-
-
-
 	    // Send Motor Data over USB
         HIDE_Debug_USB_InterfaceSend(ui16_motorDataUsb, sizeof(ui16_motorDataUsb)/sizeof(ui16_motorDataUsb[0]), debug_INT16);
-
 
 	}
 

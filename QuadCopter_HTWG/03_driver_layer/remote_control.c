@@ -345,7 +345,7 @@ const float f_maxValues[] = {ROLL_MAX, PITCH_MAX, YAW_MAX, THROTTLE_MAX};
 		ROM_IntEnable(periph_REMOTE_INT);
 
 		// Extra Timer für CPPM Pulsmessung
-		// Timer1 und dort Timer A
+		// Timer2 und dort Timer A
 		// als 16 bit runter zählen, da beim hochzählen das Prescale nicht funktioniert ( TI abhängig )
 
 		// timer 1 aktivieren

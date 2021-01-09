@@ -37,7 +37,7 @@
 #define THR_SCALE						0.8f		// [%]
 #define dt   						    0.002f		// [s]
 #define YAW_MAX_INF						(1.0f/(15.0f*M_PI/180.0f))
-#define MIX(X,Y,Z) 						(gf_flight_setPoint[flight_THROTTLE]*THR_SCALE + f_pidOut[flight_ROLL]*X + f_pidOut[flight_PITCH]*Y + f_pidOut[flight_YAW]*Z)
+#define MIX(X,Y,Z) 						(f_thrustBase + f_pidRateOut[flight_ROLL]*X + f_pidRateOut[flight_PITCH]*Y + f_pidRateOut[flight_YAW]*Z)
 
 /* ------------------------------------------------------------ */
 /*				Local Type Definitions							*/
@@ -52,6 +52,7 @@
 /* ------------------------------------------------------------ */
 extern float gf_flight_setPoint[4];
 extern float gf_sensor_fusedAngles[3];
+extern float gf_sensor_angularVelocity[3];
 extern volatile motor_Data_s gs_motor[motor_COUNT];
 
 /* ------------------------------------------------------------ */
@@ -60,6 +61,58 @@ extern volatile motor_Data_s gs_motor[motor_COUNT];
 static float f_pidLastInputs[4] = {0.0, 0.0, 0.0, 0.0};
 static float f_pidOutputSum[4] = {0.0, 0.0, 0.0, 0.0};
 static float f_pidOut[4] = {0.0, 0.0, 0.0, 0.0} ;
+
+static float f_pidRateLastInputs[4] = {0.0, 0.0, 0.0, 0.0};
+static float f_pidRateOutputSum[4] = {0.0, 0.0, 0.0, 0.0};
+static float f_pidRateOut[4] = {0.0, 0.0, 0.0, 0.0} ;
+
+
+static float f_thrustBase = 0.0;
+
+static math_pidController_s s_pidRateRoll = {
+
+    .pf_input       =   &gf_sensor_angularVelocity[flight_ROLL],
+    .pf_output      =   &f_pidRateOut[flight_ROLL],
+    .pf_setPoint    =   &gf_flight_setPoint[flight_ROLL],
+    .pf_lastInput   =   &f_pidRateLastInputs[flight_ROLL],
+    .pf_outputSum   =   &f_pidRateOutputSum[flight_ROLL],
+    .f_kP           =   math_RAD2NORM(PID_P),
+    .f_kI           =   PID_I * dt,
+    .f_kD           =   PID_D / dt,
+    .cf_maxOut      =   0.3f,
+    .cf_minOut      =   -0.3f,
+    .cf_sampleTime  =   dt
+};
+
+static math_pidController_s s_pidRatePitch = {
+
+    .pf_input       =   &gf_sensor_angularVelocity[flight_PITCH],
+    .pf_output      =   &f_pidRateOut[flight_PITCH],
+    .pf_setPoint    =   &gf_flight_setPoint[flight_PITCH],
+    .pf_lastInput   =   &f_pidRateLastInputs[flight_PITCH],
+    .pf_outputSum   =   &f_pidRateOutputSum[flight_PITCH],
+    .f_kP           =   math_RAD2NORM(PID_P),
+    .f_kI           =   PID_I * dt,
+    .f_kD           =   PID_D / dt,
+    .cf_maxOut      =   0.3f,
+    .cf_minOut      =   -0.3f,
+    .cf_sampleTime  =   dt
+};
+
+static math_pidController_s s_pidRateYaw = {
+
+    .pf_input       =   &gf_sensor_angularVelocity[flight_YAW],
+    .pf_output      =   &f_pidRateOut[flight_YAW],
+    .pf_setPoint    =   &gf_flight_setPoint[flight_YAW],
+    .pf_lastInput   =   &f_pidRateLastInputs[flight_YAW],
+    .pf_outputSum   =   &f_pidRateOutputSum[flight_YAW],
+    .f_kP           =   math_RAD2NORM(PID_P),
+    .f_kI           =   PID_I * dt,
+    .f_kD           =   PID_D / dt,
+    .cf_maxOut      =   0.3f,
+    .cf_minOut      =   -0.3f,
+    .cf_sampleTime  =   dt
+};
 
 static math_pidController_s s_pidRoll = {
 
@@ -75,6 +128,7 @@ static math_pidController_s s_pidRoll = {
     .cf_minOut      =   -0.3f,
     .cf_sampleTime  =   dt
 };
+
 
 static math_pidController_s s_pidPitch = {
 
@@ -254,6 +308,10 @@ void Control_Reset(void)
 	    f_pidLastInputs[i] = 0.0;
 	    f_pidOutputSum [i] = 0.0;
 	    f_pidOut[i] = 0.0;
+
+	    f_pidRateLastInputs[i] = 0.0;
+        f_pidRateOutputSum [i] = 0.0;
+        f_pidRateOut[i] = 0.0;
 	}
 }
 
@@ -282,8 +340,11 @@ void Control_FlightStabilisation(void)
 //    //pid_out[flight_YAW] =   Math_StepPidController(&s_pidYaw);
 //    pid_out[flight_YAW] = 0.0;
 
+    // gf_flight_setPoint[flight_THROTTLE] = [0 -> 1]
+    f_thrustBase = gf_flight_setPoint[flight_THROTTLE] * THR_SCALE;
+    Math_StepPidController(&s_pidRateRoll);
+    Math_StepPidController(&s_pidRatePitch);
 
-    Math_StepPidController(&s_pidRoll);
 }
 
 /**

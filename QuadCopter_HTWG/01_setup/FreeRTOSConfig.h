@@ -51,7 +51,7 @@
 #define INCLUDE_vTaskDelay                  		1
 #define INCLUDE_xEventGroupSetBitFromISR			1	// used for eventBits
 #define INCLUDE_xTimerPendFunctionCall 				1	// used for eventBits
-#define INCLUDE_uxTaskGetStackHighWaterMark 		0	// can be used to estimate Task Skack usage
+#define INCLUDE_uxTaskGetStackHighWaterMark 		0	// can be used to estimate Task Stack usage
 
 #if ( setup_DEV_WORKLOAD_CALC || setup_DEV_WORKLOAD_LED )
 	#define INCLUDE_xTimerGetTimerDaemonTaskHandle	1

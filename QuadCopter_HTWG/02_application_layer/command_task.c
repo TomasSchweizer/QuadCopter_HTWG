@@ -22,19 +22,13 @@
 #include "debug_interface.h"
 #include "display_driver.h"
 
-// TODO maybe change debug so that drivers don't have to be included in command task
-#include "sensor_driver.h"
-#include "motor_driver.h"
-
 // application
 #include "command_task.h"
-#include "receiver_task.h"		// for drawDisplay
-#include "fault.h"
-#include "flight_control.h"		// for PID Tune over debug interface
 
 // utils
 #include "qc_math.h"
 #include "workload.h"
+#include "fault.h"
 #include "link_functions.h"
 
 // setup
@@ -100,10 +94,7 @@ static void CommandTask(void *pvParameters)
 static void UpdateStuff(void* p_parameter)
 {
 	HIDE_Display_Redraw();
-	//HIDE_Control_Debug_USB_GetPID();
-	//HIDE_Control_DebugGetPid();
-	HIDE_Sensor_SendDataOverUSB();
-	//HIDE_Motor_SendDataOverUSB();
+	HIDE_Debug_USB_Com();
 
 	// TODO insert USB HIDE_FUnction
 }
@@ -130,19 +121,18 @@ static void UpdateTimerCallback(TimerHandle_t xTimer)
 uint32_t CommandTask_Init(void)
 {
 	HIDE_Display_Init();
+
+	// gets kicked from compiler if uart is not choosen
 	HIDE_Debug_InterfaceInit();
+
+	// TODO initalize USB debug interface
 	HIDE_Debug_USB_InterfaceInit();
-	// TODO add HIDE_Debug_USB_Interface
 
 	#if ( setup_DEV_DISPLAY )
 		HIDE_Display_InsertDrawFun(HIDE_Workload_DrawDisplay);
 		HIDE_Display_InsertDrawFun(HIDE_Fault_DrawDisplay);
-		HIDE_Display_InsertDrawFun(HIDE_Receive_DrawDisplay);
-		HIDE_Display_InsertDrawFun(HIDE_Control_PID_TUNE_DrawDisplay);
 	#endif
 
-//	if ( setup_DEV_DEBUG_USB)
-//	    HIDE_
 
 	//
 	// Create a timer, which inserts every x ms a UpdateFunktion into the Command Queue

@@ -63,9 +63,6 @@ extern uint32_t __STACK_TOP;
 extern void xPortPendSVHandler(void);
 extern void vPortSVCHandler(void);
 extern void xPortSysTickHandler(void);
-
-//extern void UARTStdioIntHandler(void);
-//extern void SensorDriverI2CIntHandler(void);
 extern void Dma_ErrorISR(void);
 
 //
@@ -74,11 +71,9 @@ extern void Dma_ErrorISR(void);
 #define HANDLER_GPIO_PORT_C					IntDefaultHandler
 #define HANDLER_GPIO_PORT_D					IntDefaultHandler
 #define HANDLER_GPIO_PORT_E					IntDefaultHandler
-#define HANDLER_UART0_RX_AND_TX				IntDefaultHandler
 #define HANDLER_I2C0_MASTER_AND_Slave		IntDefaultHandler
 #define HANDLER_I2C1_MASTER_AND_Slave		IntDefaultHandler
 #define HANDLER_I2C3_MASTER_AND_Slave		IntDefaultHandler
-#define HANDLER_GPIO_PORT_D					IntDefaultHandler
 #define HANDLER_TIMER2_A                    IntDefaultHandler
 #define HANDLER_USB0                        IntDefaultHandler
 

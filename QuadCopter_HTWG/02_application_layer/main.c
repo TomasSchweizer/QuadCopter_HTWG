@@ -68,7 +68,7 @@ int main(void)
 	//
 	//  QC_BASIC
 	//
-	#if   (setup_QC_BASIC )
+	#if ( setup_QC_BASIC )
 
 		if(FlightTask_Init())
 			while(1);

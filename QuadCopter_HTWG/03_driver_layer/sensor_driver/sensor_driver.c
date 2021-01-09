@@ -15,7 +15,7 @@
 #include <stdbool.h>
 #include <math.h>
 
-
+#include "sensor_driver.h"
 //  Hardware Specific
 #include "inc/hw_memmap.h"
 #include "inc/hw_ints.h"
@@ -86,7 +86,9 @@
 /* ------------------------------------------------------------ */
 
 float volatile gf_sensor_attitudeQuaternion[4] = {1.0, 0.0, 0.0, 0.0};
+volatile float gf_sensor_dotAttitudeQuaternion[4];
 float gf_sensor_fusedAngles[3];
+float gf_sensor_angularVelocity[3];
 float gf_sensor_pressure; // TODO maybe later just altitude global
 float gf_sensor_altitude;
 
@@ -377,7 +379,7 @@ static void correctIMUOffset(float* sensor_data,uint8_t calibrate){
 	static void i2cBaroWrite(uint8_t ui8_i2cAdress, uint8_t command);
 	static baroData_s calculateBaroData(uint32_t t_baro, uint32_t p_baro, uint8_t calibrate);
 	static float calculateAltitude(baroData_s baroData, float accel_z, uint8_t calibrate);
-
+	static void calculateAngularVelocity(float sensor_data[], float angularVelocity[]);
 	/* ------------------------------------------------------------ */
 	/*				Global Variables								*/
 	/* ------------------------------------------------------------ */
@@ -608,7 +610,6 @@ static void correctIMUOffset(float* sensor_data,uint8_t calibrate){
                         while(1);// you will come here, when configTIMER_QUEUE_LENGTH is full
                     else
                         portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
-
                     break;
 
                 }
@@ -726,10 +727,34 @@ static void correctIMUOffset(float* sensor_data,uint8_t calibrate){
 
 	}
 
+	// TODO try to calcultae velocity from angle has to be possible to be smoover
+	static void calculateAngularVelocity(float angles[], float angularVelocity[3]){
+
+	    float w_angles[3];
+	    static float anglesOld[3];
+
+	    uint8_t i;
+	    for(i=0; i<3; i++)
+	    {
+	        w_angles[i] = (angles[i] - anglesOld[i]) / dt;
+	        // TODO check if usable limits
+	        math_LIMIT(w_angles[i], -2.0, 2.0);
+	        gf_sensor_angularVelocity[i] = w_angles[i];
+	        anglesOld[i] = angles[i];
+	    }
+
+
+
+
+
+
+	}
+
     // TODO test baro
     static void i2cBaroWrite(uint8_t ui8_i2cAdress, uint8_t command){
 
         ui8_i2cBufferWrite[0] = command;
+        while(I2CMasterBusy(I2C_PERIPH_BASE));
         if(I2CMWrite(  &i2cMastInst_s,                     // pointer to i2c master instance
                     ui8_i2cAdress,                      // I2C adress
                     ui8_i2cBufferWrite,                          // I2C message
@@ -740,6 +765,7 @@ static void correctIMUOffset(float* sensor_data,uint8_t calibrate){
             // TODO implement blind landing sequence if program gets here i2c doesn't work correctly anymore
             while(1);
         }
+        while(I2CMasterBusy(I2C_PERIPH_BASE));
 
     }
 
@@ -1002,7 +1028,7 @@ static void correctIMUOffset(float* sensor_data,uint8_t calibrate){
 		convertIMUData(sensor_data);
         correctIMUOffset(sensor_data, 1);
 
-		// For calibration the barometer has to be read a few times so that the right temperature is measured (nothing special just reading)
+		//For calibration the barometer has to be read a few times so that the right temperature is measured (nothing special just reading)
 		if(ui8_newPressValue == 1)
 		{
 		    ui8_newPressValue = 0;
@@ -1035,9 +1061,14 @@ static void correctIMUOffset(float* sensor_data,uint8_t calibrate){
         // Get attitude quaternion via sensor fusion from MPU data
         MadgwickAHRSupdate(sensor_data[X_ACCEL], sensor_data[Y_ACCEL], sensor_data[Z_ACCEL],
                            sensor_data[X_GYRO],  sensor_data[Y_GYRO], sensor_data[Z_GYRO],
-                           sensor_data[X_MAGNET], sensor_data[Y_MAGNET], sensor_data[Z_MAGNET], gf_sensor_attitudeQuaternion, dt);
+                           sensor_data[X_MAGNET], sensor_data[Y_MAGNET], sensor_data[Z_MAGNET],
+                           gf_sensor_attitudeQuaternion, gf_sensor_dotAttitudeQuaternion, dt);
+
         // Get Euler/Tait-Bryan angles from quaternion
         Math_QuatToEuler(gf_sensor_attitudeQuaternion, gf_sensor_fusedAngles);
+        calculateAngularVelocity(gf_sensor_fusedAngles, gf_sensor_angularVelocity);
+
+
 
         // calculate correct pressure for altitude control only every 10ms (5 loops) because conversion takes around >9ms
         if(ui8_newPressValue == 1)
@@ -1046,9 +1077,12 @@ static void correctIMUOffset(float* sensor_data,uint8_t calibrate){
             s_baroData = calculateBaroData(s_rawData.t_baro, s_rawData.p_baro, 0);
             gf_sensor_pressure = s_baroData.f_pressure;
             gf_sensor_altitude = calculateAltitude(s_baroData, 0, 0);
+
+
+
         }
 
-	}
+}
 
 
 #elif ( setup_SENSOR_NONE == (setup_SENSOR&setup_MASK_OPT1) )
@@ -1146,10 +1180,9 @@ uint8_t Sensor_IsCalibrateRequired(void)
     {
 
 
-        gf_usb_debug[0] = gf_sensor_attitudeQuaternion[0];
-        gf_usb_debug[1] = gf_sensor_attitudeQuaternion[1];
-        gf_usb_debug[2] = gf_sensor_attitudeQuaternion[2];
-        gf_usb_debug[3] = gf_sensor_attitudeQuaternion[3];
+        gf_usb_debug[0] = gf_sensor_pressure;
+
+
 
         HIDE_Debug_USB_InterfaceSend(gf_usb_debug, sizeof(gf_usb_debug)/ sizeof(gf_usb_debug[0]), debug_FLOAT);
 
