@@ -297,24 +297,18 @@ static void correctIMUOffset(float* sensor_data,uint8_t calibrate){
     #define MAGNET_READ_SENSITIVITY_VALUES      (1)
     #define MAGNET_SELTEST_ON                   (1)
 
-    #define BARO_INIT                           (1)
+    #define ALTITUDE_INIT                      (1)
 
 	#define I2CMPU_ADRESS 						MPU_SLAVE_ADDR_1
+    #define I2CBARO_ADDRESS                     BARO_ADDRESS
+//  #define I2CLIDAR_ADDRESS
+
 	#define ENABLE_BUSY_WAITING_READ			(0)					// for measurement purpose
 
 	//
 	// define the desired peripheral setup (see peripheral_setup.h)
 	//
-	#if ( periph_SENSOR_INT == INT_I2C2 )
-		#define SYSCTL_PERIPH_I2C			SYSCTL_PERIPH_I2C2
-		#define I2C_PERIPH_BASE				I2C2_BASE
-		#define SYSCTL_PERIPH_PORT			SYSCTL_PERIPH_GPIOE
-		#define PORT_BASE					GPIO_PORTE_BASE
-		#define I2C_SCL						GPIO_PE4_I2C2SCL
-		#define SCL_PIN						GPIO_PIN_4
-		#define I2C_SDA						GPIO_PE5_I2C2SDA
-		#define SDA_PIN						GPIO_PIN_5
-	#elif ( periph_SENSOR_INT == INT_I2C1 )
+	#if ( periph_SENSOR_MPU_INT == INT_I2C1 )
 		#define SYSCTL_PERIPH_I2C			SYSCTL_PERIPH_I2C1
 		#define I2C_PERIPH_BASE				I2C1_BASE
 		#define SYSCTL_PERIPH_PORT			SYSCTL_PERIPH_GPIOA
@@ -327,17 +321,30 @@ static void correctIMUOffset(float* sensor_data,uint8_t calibrate){
 		#error	ERROR implement the defines above here
 	#endif
 
+    #if ( periph_SENSOR_ALT_INT == INT_I2C2 )
+        #define SYSCTL_PERIPH_I2C_ALT       SYSCTL_PERIPH_I2C2
+        #define I2C_PERIPH_BASE_ALT         I2C2_BASE
+        #define SYSCTL_PERIPH_PORT_ALT      SYSCTL_PERIPH_GPIOE
+        #define PORT_BASE_ALT               GPIO_PORTE_BASE
+        #define I2C_SCL_ALT                 GPIO_PE4_I2C2SCL
+        #define SCL_PIN_ALT                 GPIO_PIN_4
+        #define I2C_SDA_ALT                 GPIO_PE5_I2C2SDA
+        #define SDA_PIN_ALT                 GPIO_PIN_5
+    #else
+        #error  ERROR implement the defines above here
+    #endif
+
 	/* ------------------------------------------------------------ */
 	/*				Local Type Definitions							*/
 	/* ------------------------------------------------------------ */
 
-	enum sensorReadState_e
+	enum sensorMPUReadState_e
 	{
-		READY,			// Sensor is not busy
+		MPU_READY,			// Sensor is not busy
 		READ_ACCEL,		// read accel  and next state will be READ_GYRO
 		READ_GYRO,		// read gyro   and next state will be READ_MAGNET
 		READ_MAGNET,		// read magnet and next state will be READY or READ_BARO
-		READ_BARO       // read baro next state will be READY
+
 	};
 
 	typedef struct rawData_s {
@@ -352,6 +359,7 @@ static void correctIMUOffset(float* sensor_data,uint8_t calibrate){
 	   int16_t z_magnet;
 	   uint32_t p_baro;
 	   uint32_t t_baro;
+	   uint16_t alt_lidar;
 	} rawData_s ;
 
 	typedef struct baroData_s {
@@ -361,34 +369,62 @@ static void correctIMUOffset(float* sensor_data,uint8_t calibrate){
 
 	} baroData_s;
 
-	/* ------------------------------------------------------------ */
-	/*				Forward Declarations							*/
-	/* ------------------------------------------------------------ */
 
-	static void SensorCalibrate(void);
-	static void correctIMUOffset(float* sensor_data,uint8_t calibrate);
-	static void IMUAxis2QCAxis(float* sensor_data);
-	static void convertIMUData(float* sensor_data);
-	static void I2cBurstRead(uint8_t ui8_i2cAdress, uint8_t registerAdress, uint8_t *data_array, uint8_t data_length);
-    static void I2cBurstReadBlocking(enum sensorReadState_e e_startState,uint8_t ui8_i2cAdress, uint8_t registerAdress, uint8_t *data_array, uint8_t data_length);
-	static void I2CReadFinishCallback(void *pvData, uint_fast8_t ui8_status);
-	static void I2CWriteFinishCallback(void *pvData, uint_fast8_t ui8_status);
-	static void i2cMpuWrite(uint8_t ui8_i2cAdress, uint8_t registerAdress, uint8_t data);
-
-	// TODO test baro
-	static void i2cBaroWrite(uint8_t ui8_i2cAdress, uint8_t command);
-	static baroData_s calculateBaroData(uint32_t t_baro, uint32_t p_baro, uint8_t calibrate);
-	static float calculateAltitude(baroData_s baroData, float accel_z, uint8_t calibrate);
-	static void calculateAngularVelocity(float sensor_data[], float angularVelocity[]);
 	/* ------------------------------------------------------------ */
 	/*				Global Variables								*/
 	/* ------------------------------------------------------------ */
 
-	#if(periph_SENSOR_INT==periph_MOTOR_INT)
-		extern tI2CMInstance i2cMastInst_s;				// I2C master instance
+	#if(periph_SENSOR_MPU_INT==periph_MOTOR_INT)
+		extern tI2CMInstance i2cMastInst1_s;				// I2C master instance
 	#else
-		static tI2CMInstance i2cMastInst_s;				// I2C master instance
+		static tI2CMInstance i2cMastInst1_s;				// I2C master instance
 	#endif
+
+    #if(ALTITUDE_INIT)
+
+		tI2CMInstance i2cMastInst2_s;
+
+	    enum sensorAltStates_e
+	    {
+	        ALT_READY,          // Sensor is not busy
+	        READ_BARO,
+	        READ_LIDAR,
+
+	    };
+    // TODO test baro
+        static void i2cALtReadFinishCallback(void *pvData, uint_fast8_t ui8_status);
+        static void i2cAltWriteFinishCallback(void *pvData, uint_fast8_t ui8_status);
+        static void i2cAltBurstReadBlocking(enum sensorAltStates_e e_startState,uint8_t ui8_i2cAdress, uint8_t registerAdress, uint8_t *data_array, uint8_t data_length);
+        static void i2cAltBurstRead(uint8_t ui8_i2cAdress, uint8_t registerAdress, uint8_t *data_array, uint8_t data_length);
+        static void i2cAltWrite(uint8_t ui8_i2cAdress, uint8_t command);
+
+        static baroData_s calculateBaroData(uint32_t t_baro, uint32_t p_baro, uint8_t calibrate);
+        static float calculateAltitude(baroData_s baroData, float accel_z, uint8_t calibrate);
+        static void calculateAngularVelocity(float sensor_data[], float angularVelocity[]);
+
+        static enum sensorAltStates_e e_sensorAltStates = ALT_READY;
+
+        void Sensor_AltI2CIntHandler(void)
+        {
+            I2CMIntHandler(&i2cMastInst2_s);
+        }
+    #endif
+
+    /* ------------------------------------------------------------ */
+    /*              Forward Declarations                            */
+    /* ------------------------------------------------------------ */
+
+    static void SensorCalibrate(void);
+    static void correctIMUOffset(float* sensor_data,uint8_t calibrate);
+    static void IMUAxis2QCAxis(float* sensor_data);
+    static void convertIMUData(float* sensor_data);
+    static void i2cMpuBurstRead(uint8_t ui8_i2cAdress, uint8_t registerAdress, uint8_t *data_array, uint8_t data_length);
+    static void i2cMpuBurstReadBlocking(enum sensorMPUReadState_e e_startState,uint8_t ui8_i2cAdress, uint8_t registerAdress, uint8_t *data_array, uint8_t data_length);
+    static void i2cMpuReadFinishCallback(void *pvData, uint_fast8_t ui8_status);
+    static void i2cMpuWriteFinishCallback(void *pvData, uint_fast8_t ui8_status);
+    static void i2cMpuWrite(uint8_t ui8_i2cAdress, uint8_t registerAdress, uint8_t data);
+
+
 
 	/* ------------------------------------------------------------ */
 	/*				Local Variables									*/
@@ -398,7 +434,8 @@ static void correctIMUOffset(float* sensor_data,uint8_t calibrate){
 	static uint8_t ui8_i2cBufferWrite[12];
 	static volatile uint8_t ui8_i2cFinishedFlag = 1;
 	static uint8_t ui8_mpuSetUpFlag, ui8_magSetupFlag, ui8_baroSetupFlag;
-	static enum sensorReadState_e e_sensorReadState=READY;
+	static enum sensorMPUReadState_e e_sensorMPUReadState= MPU_READY;
+
 
 	// Counter variables for Barometer (MS5611) loop
 	static uint8_t ui8_i2cPressCounter = 0;
@@ -440,10 +477,12 @@ static void correctIMUOffset(float* sensor_data,uint8_t calibrate){
 	 *
 	 * 			Give the interrupt handle to the I2C Master instance
 	 */
-	void Sensor_I2CIntHandler(void) // dieser wird für master und slave verwendet?
+	void Sensor_MpuI2CIntHandler(void) // dieser wird für master und slave verwendet?
 	{
-		I2CMIntHandler(&i2cMastInst_s);
+		I2CMIntHandler(&i2cMastInst1_s);
 	}
+
+
 
 	/**
 	 * \brief	I2C Callback funkction
@@ -453,7 +492,7 @@ static void correctIMUOffset(float* sensor_data,uint8_t calibrate){
 	 * \param 	pvData		not used
 	 * \param	ui8_status	status to find error in I2C transmission
 	 */
-	static void I2CReadFinishCallback(void *pvData, uint_fast8_t ui8_status)
+	static void i2cMpuReadFinishCallback(void *pvData, uint_fast8_t ui8_status)
 	{
 		// is there  an error in I2C transmission?
 		if(ui8_status != I2CM_STATUS_SUCCESS)
@@ -463,11 +502,11 @@ static void correctIMUOffset(float* sensor_data,uint8_t calibrate){
 
 
 		// check if all sensors are initialized
-		if(ui8_mpuSetUpFlag == 1 && ui8_magSetupFlag == 1 && ui8_baroSetupFlag == 1)
+		if(ui8_mpuSetUpFlag == 1 && ui8_magSetupFlag == 1)
 		{
-            switch(e_sensorReadState)
+            switch(e_sensorMPUReadState)
             {
-                case READY:		// this should never happen!
+                case MPU_READY:		// this should never happen!
                 {
                     while(1);
                 }
@@ -476,8 +515,8 @@ static void correctIMUOffset(float* sensor_data,uint8_t calibrate){
                     s_rawData.x_accel = (ui8_i2cBufferRead[0]<<8) + ui8_i2cBufferRead[1];
                     s_rawData.y_accel = (ui8_i2cBufferRead[2]<<8) + ui8_i2cBufferRead[3];
                     s_rawData.z_accel = (ui8_i2cBufferRead[4]<<8) + ui8_i2cBufferRead[5];
-                    e_sensorReadState=READ_GYRO;
-                    I2cBurstRead(I2CMPU_ADRESS,GYRO_XOUT_H, ui8_i2cBufferRead, 6);
+                    e_sensorMPUReadState=READ_GYRO;
+                    i2cMpuBurstRead(I2CMPU_ADRESS,GYRO_XOUT_H, ui8_i2cBufferRead, 6);
                     break;
                 }
                 case READ_GYRO:
@@ -485,8 +524,8 @@ static void correctIMUOffset(float* sensor_data,uint8_t calibrate){
                     s_rawData.x_gyro = (ui8_i2cBufferRead[0]<<8) + ui8_i2cBufferRead[1];
                     s_rawData.y_gyro = (ui8_i2cBufferRead[2]<<8) + ui8_i2cBufferRead[3];
                     s_rawData.z_gyro = (ui8_i2cBufferRead[4]<<8) + ui8_i2cBufferRead[5];
-                    e_sensorReadState=READ_MAGNET;
-                    I2cBurstRead(MAGNET_ADRESS,MAGNET_HXL, ui8_i2cBufferRead, 7);
+                    e_sensorMPUReadState=READ_MAGNET;
+                    i2cMpuBurstRead(MAGNET_ADRESS,MAGNET_HXL, ui8_i2cBufferRead, 7);
                     break;
                 }
                 case READ_MAGNET:
@@ -494,114 +533,11 @@ static void correctIMUOffset(float* sensor_data,uint8_t calibrate){
                     s_rawData.x_magnet = (ui8_i2cBufferRead[1]<<8) + ui8_i2cBufferRead[0];
                     s_rawData.y_magnet = (ui8_i2cBufferRead[3]<<8) + ui8_i2cBufferRead[2];
                     s_rawData.z_magnet = (ui8_i2cBufferRead[5]<<8) + ui8_i2cBufferRead[4];
-
-                    if(ui8_i2cPressCounter == 5){
-
-                        ui8_i2cPressCounter = 0;
-
-                        // TODO can be used without if
-                        if(ui8_i2cTempCounter == 0)
-                        {
-                            // read temperature value in OSC = 4096 (24 bit)
-                            e_sensorReadState=READ_BARO;
-                            I2cBurstRead(BARO_ADDRESS, BARO_ADC_READ_COMMAND, ui8_i2cBufferRead, 3);
-
-                        }
-                        else
-                        {
-                            // read pressure value in OSC = 4096 (24 bit)
-                            e_sensorReadState=READ_BARO;
-                            I2cBurstRead(BARO_ADDRESS, BARO_ADC_READ_COMMAND, ui8_i2cBufferRead, 3);
-                        }
-
-                        // increase the temperature counter with each measurement
-                        ui8_i2cTempCounter++;
-
-                    }
-                    else
-                    {
-                        e_sensorReadState=READY;
-
-                        // increase pressure counter so that 10ms elapse between requiring and reading the values
-                        ui8_i2cPressCounter++;
-
-                        HIDE_Workload_EstimateStop(p_workHandle);
-
-                        #if	ENABLE_BUSY_WAITING_READ
-                            ui8_readFlag=0;
-                        #endif
-                        // fire eventBit to notify Sensor Read has finished
-                        BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-                        if(pdFAIL==xEventGroupSetBitsFromISR(gx_receiver_eventGroup,receiver_SENSOR_DATA, &xHigherPriorityTaskWoken))
-                            while(1);// you will come here, when configTIMER_QUEUE_LENGTH is full
-                        else
-                            portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
-                    }
-
-
-                    break;
-
-                }
-                case READ_BARO:
-                {
-                    // save barometer values into variables
-                    if(ui8_i2cTempCounter == 1)
-                    {
-                        // Read temp value in rotating memory and calculate average of the last 5 measurements to help against temperature spikes
-                        ui32_tempSum -= ui32_tempRotMem[ui8_rotMemCounter];
-                        ui32_tempRotMem[ui8_rotMemCounter] = ui8_i2cBufferRead[0] << 16 | ui8_i2cBufferRead[1] << 8 | ui8_i2cBufferRead[2];
-                        ui32_tempSum += ui32_tempRotMem[ui8_rotMemCounter];
-                        ui8_rotMemCounter++;
-
-                        if(ui8_rotMemCounter == 5)
-                        {
-                            ui8_rotMemCounter = 0;
-                        }
-
-                        if(ui32_tempRotMem[4] != 0 && ui32_pressRotMem[19] != 0)
-                        {
-                            s_rawData.t_baro = ui32_tempSum / 5;
-                        }
-                    }
-                    else
-                    {
-                        // Read pressure value in rotating memory and calculate average of the last 20 measurements to smoothen pressure readings
-                        ui32_pressSum -= ui32_pressRotMem[ui8_pressMemCounter];
-                        ui32_pressRotMem[ui8_pressMemCounter] = ui8_i2cBufferRead[0] << 16 | ui8_i2cBufferRead[1] << 8 | ui8_i2cBufferRead[2];
-                        ui32_pressSum += ui32_pressRotMem[ui8_pressMemCounter];
-                        ui8_pressMemCounter++;
-
-                        if(ui8_pressMemCounter == 20)
-                        {
-                            ui8_pressMemCounter = 0;
-                        }
-
-                        if(ui32_pressRotMem[19] != 0 && ui32_tempRotMem[4] != 0 )
-                        {
-                            s_rawData.p_baro = ui32_pressSum / 20;
-                            ui8_newPressValue = 1;
-                        }
-                    }
-
-                    if(ui8_i2cTempCounter == 20)
-                    {
-                       // set temp counter to zero and require temp value
-                       ui8_i2cTempCounter = 0;
-                       i2cBaroWrite(BARO_ADDRESS, BARO_CONVER_TEMP_4096);
-                    }
-                    else
-                    {   // require pressure value
-                       i2cBaroWrite(BARO_ADDRESS, BARO_CONVER_PRESS_4096);
-                    }
-
-                    // increase pressure counter so that 10ms elapse between requiring and reading the values
-                    ui8_i2cPressCounter++;
-
-                    e_sensorReadState=READY;
+                    e_sensorMPUReadState=MPU_READY;
 
                     HIDE_Workload_EstimateStop(p_workHandle);
 
-                    #if ENABLE_BUSY_WAITING_READ
+                    #if	ENABLE_BUSY_WAITING_READ
                         ui8_readFlag=0;
                     #endif
                     // fire eventBit to notify Sensor Read has finished
@@ -610,9 +546,11 @@ static void correctIMUOffset(float* sensor_data,uint8_t calibrate){
                         while(1);// you will come here, when configTIMER_QUEUE_LENGTH is full
                     else
                         portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
+
                     break;
 
                 }
+
             }
 		}
 		else
@@ -629,7 +567,7 @@ static void correctIMUOffset(float* sensor_data,uint8_t calibrate){
 	 * \param 	pvData		not used
 	 * \param	ui8_status	status to find error in I2C transmission
 	 */
-	static void I2CWriteFinishCallback(void *pvData, uint_fast8_t ui8_status)
+	static void i2cMpuWriteFinishCallback(void *pvData, uint_fast8_t ui8_status)
 	{
 		// is there  an error in I2C transmission?
 		if(ui8_status != I2CM_STATUS_SUCCESS)// sometimes this happens, during init in debug mode (unplug and replug usb so that the Sensor loses voltage)
@@ -641,14 +579,14 @@ static void correctIMUOffset(float* sensor_data,uint8_t calibrate){
 
 	}
 
-	static void I2cBurstReadBlocking(enum sensorReadState_e e_startState,uint8_t ui8_i2cAdress, uint8_t registerAdress, uint8_t *data_array, uint8_t data_length)
+	static void i2cMpuBurstReadBlocking(enum sensorMPUReadState_e e_startState,uint8_t ui8_i2cAdress, uint8_t registerAdress, uint8_t *data_array, uint8_t data_length)
 	{
-		e_sensorReadState=e_startState;
+	    e_sensorMPUReadState=e_startState;
 		#if	ENABLE_BUSY_WAITING_READ
 			ui8_readFlag=1;
 		#endif
 		HIDE_Workload_EstimateStart(p_workHandle);
-		I2cBurstRead(ui8_i2cAdress,registerAdress, data_array, data_length);
+		i2cMpuBurstRead(ui8_i2cAdress,registerAdress, data_array, data_length);
 		#if	ENABLE_BUSY_WAITING_READ
 			while(ui8_readFlag);
 		#endif
@@ -671,16 +609,16 @@ static void correctIMUOffset(float* sensor_data,uint8_t calibrate){
 		HIDE_Fault_Increment(fault_SENSOR,ui8_error);
 	}
 
-	static void I2cBurstRead(uint8_t ui8_i2cAdress, uint8_t registerAdress, uint8_t *data_array, uint8_t data_length)
+	static void i2cMpuBurstRead(uint8_t ui8_i2cAdress, uint8_t registerAdress, uint8_t *data_array, uint8_t data_length)
 	{
 		ui8_i2cBufferWrite[0] = registerAdress;
-		if(I2CMRead(	&i2cMastInst_s, 					// pointer to i2c master instance
+		if(I2CMRead(	&i2cMastInst1_s, 					// pointer to i2c master instance
 					ui8_i2cAdress,						// address of the I2C device to access
 					ui8_i2cBufferWrite,							// pointer to the data buffer to be written.
 					1,									// the number of bytes to be written
 					data_array,							// pointer to the buffer to be filled with the read data
 					data_length,						// the number of bytes to be read
-					I2CReadFinishCallback, 				// function to be called when the transfer has completed
+					i2cMpuReadFinishCallback, 				// function to be called when the transfer has completed
 					0)==0)									// pointer that is passed to the callback function.
 		{
 		    // TODO change so that quadcopter goes into blind landing because i2c error is not fixable without new start
@@ -697,11 +635,11 @@ static void correctIMUOffset(float* sensor_data,uint8_t calibrate){
 
 		ui8_i2cBufferWrite[0] = registerAdress;
 		ui8_i2cBufferWrite[1] = data;
-		I2CMWrite(	&i2cMastInst_s, 					// pointer to i2c master instance
+		I2CMWrite(	&i2cMastInst1_s, 					// pointer to i2c master instance
 					ui8_i2cAdress, 						// I2C adress
 					ui8_i2cBufferWrite, 							// I2C message
 					2, 									// message length
-					I2CWriteFinishCallback, 			// callback funktion (when message was sent)
+					i2cMpuWriteFinishCallback, 			// callback funktion (when message was sent)
 					0);									// callback data
 		while(I2CMasterBusy(I2C_PERIPH_BASE));
 	}
@@ -710,7 +648,7 @@ static void correctIMUOffset(float* sensor_data,uint8_t calibrate){
 	static void i2cGetMpuData(float sensor_data[]){
 
 		// Read All Sensor Data
-		I2cBurstReadBlocking(READ_ACCEL,I2CMPU_ADRESS,ACCEL_XOUT_H, ui8_i2cBufferRead, 6);
+	    i2cMpuBurstReadBlocking(READ_ACCEL,I2CMPU_ADRESS,ACCEL_XOUT_H, ui8_i2cBufferRead, 6);
 
 		sensor_data[X_ACCEL]	= (float)s_rawData.x_accel;
 		sensor_data[Y_ACCEL]	= (float)s_rawData.y_accel;
@@ -743,31 +681,214 @@ static void correctIMUOffset(float* sensor_data,uint8_t calibrate){
 	        anglesOld[i] = angles[i];
 	    }
 
-
-
-
-
-
 	}
 
+
+#if (ALTITUDE_INIT)
+	static void i2cALtReadFinishCallback(void *pvData, uint_fast8_t ui8_status)
+    {
+        // is there  an error in I2C transmission?
+        if(ui8_status != I2CM_STATUS_SUCCESS)
+            ui8_i2cError=true;
+        else
+            ui8_i2cError=false;
+
+
+        // check if all sensors are initialized //TODO add Lidar setupFlag
+        if(ui8_baroSetupFlag == 1)
+        {
+            switch(e_sensorAltStates)
+            {
+                case ALT_READY:     // this should never happen!
+                {
+                    while(1);
+                }
+
+                case READ_BARO:
+                {
+                    if(ui8_i2cTempCounter == 1)
+                     {
+                         // Read temp value in rotating memory and calculate average of the last 5 measurements to help against temperature spikes
+                         ui32_tempSum -= ui32_tempRotMem[ui8_rotMemCounter];
+                         ui32_tempRotMem[ui8_rotMemCounter] = ui8_i2cBufferRead[0] << 16 | ui8_i2cBufferRead[1] << 8 | ui8_i2cBufferRead[2];
+                         ui32_tempSum += ui32_tempRotMem[ui8_rotMemCounter];
+                         ui8_rotMemCounter++;
+
+                         if(ui8_rotMemCounter == 5)
+                         {
+                             ui8_rotMemCounter = 0;
+                         }
+
+                         if(ui32_tempRotMem[4] != 0 && ui32_pressRotMem[19] != 0)
+                         {
+                             s_rawData.t_baro = ui32_tempSum / 5;
+                         }
+                     }
+                     else
+                     {
+                         // Read pressure value in rotating memory and calculate average of the last 20 measurements to smoothen pressure readings
+                         ui32_pressSum -= ui32_pressRotMem[ui8_pressMemCounter];
+                         ui32_pressRotMem[ui8_pressMemCounter] = ui8_i2cBufferRead[0] << 16 | ui8_i2cBufferRead[1] << 8 | ui8_i2cBufferRead[2];
+                         ui32_pressSum += ui32_pressRotMem[ui8_pressMemCounter];
+                         ui8_pressMemCounter++;
+
+                         if(ui8_pressMemCounter == 20)
+                         {
+                             ui8_pressMemCounter = 0;
+                         }
+
+                         if(ui32_pressRotMem[19] != 0 && ui32_tempRotMem[4] != 0 )
+                         {
+                             s_rawData.p_baro = ui32_pressSum / 20;
+                             ui8_newPressValue = 1;
+                         }
+
+                         // increase the temperature counter with each measurement
+                         ui8_i2cTempCounter++;
+
+                     }
+
+                    e_sensorAltStates = READ_LIDAR;
+                    break;
+
+                }
+                case READ_LIDAR:
+                {
+                    e_sensorAltStates = ALT_READY;
+
+                   #if ENABLE_BUSY_WAITING_READ
+                       ui8_readFlag=0;
+                   #endif
+                   // fire eventBit to notify Sensor Read has finished
+                   BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+                   if(pdFAIL==xEventGroupSetBitsFromISR(gx_receiver_eventGroup,receiver_SENSOR_DATA, &xHigherPriorityTaskWoken))
+                       while(1);// you will come here, when configTIMER_QUEUE_LENGTH is full
+                   else
+                       portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
+                   break;
+
+                }
+            }
+        }
+    }
+
+
+
+
+
+
+	// TODO maybe own fault group
+    static void i2cAltWriteFinishCallback(void *pvData, uint_fast8_t ui8_status)
+    {
+
+    }
+
+    static void i2cAltBurstReadBlocking(enum sensorAltStates_e e_startState,uint8_t ui8_i2cAdress, uint8_t registerAdress, uint8_t *data_array, uint8_t data_length)
+    {
+        e_sensorAltStates = e_startState;
+        #if ENABLE_BUSY_WAITING_READ
+            ui8_readFlag=1;
+        #endif
+        HIDE_Workload_EstimateStart(p_workHandle);
+        i2cAltBurstRead(ui8_i2cAdress,registerAdress, data_array, data_length);
+        #if ENABLE_BUSY_WAITING_READ
+            while(ui8_readFlag);
+        #endif
+
+        EventBits_t x_receiverEventBits;
+        //  Wait for sensor receiver event
+        x_receiverEventBits = xEventGroupWaitBits(gx_receiver_eventGroup,
+                receiver_SENSOR_DATA,
+                pdTRUE,          // clear Bits before returning.
+                pdTRUE,          // wait for all Bits
+                SENSOR_READ_TIMEOUT_MS / portTICK_PERIOD_MS ); // maximum wait time
+        HIDE_Receive_Increment(receiver_SENSOR_DATA);
+
+        // unblock because of timeout, or i2cError?
+        uint8_t ui8_error=(receiver_SENSOR_DATA & x_receiverEventBits == 0) || ui8_i2cError;
+        if( ui8_error )
+            xEventGroupSetBits(gx_fault_EventGroup,fault_SENSOR);
+        else
+            xEventGroupClearBits(gx_fault_EventGroup,fault_SENSOR);
+        HIDE_Fault_Increment(fault_SENSOR,ui8_error);
+    }
+
+    static void i2cAltBurstRead(uint8_t ui8_i2cAdress, uint8_t registerAdress, uint8_t *data_array, uint8_t data_length)
+        {
+            ui8_i2cBufferWrite[0] = registerAdress;
+            if(I2CMRead(    &i2cMastInst2_s,                    // pointer to i2c master instance
+                        ui8_i2cAdress,                      // address of the I2C device to access
+                        ui8_i2cBufferWrite,                         // pointer to the data buffer to be written.
+                        1,                                  // the number of bytes to be written
+                        data_array,                         // pointer to the buffer to be filled with the read data
+                        data_length,                        // the number of bytes to be read
+                        i2cALtReadFinishCallback,               // function to be called when the transfer has completed
+                        0)==0)                                  // pointer that is passed to the callback function.
+            {
+                // TODO change so that quadcopter goes into blind landing because i2c error is not fixable without new start
+                // No commands can be given to i2c anymore really bad because then motor and sensors are not working anymore
+                // TODO test just restart I2C master test if it can then work properly again
+               while(1);
+            }
+        }
+
     // TODO test baro
-    static void i2cBaroWrite(uint8_t ui8_i2cAdress, uint8_t command){
+    static void i2cAltWrite(uint8_t ui8_i2cAdress, uint8_t command){
 
         ui8_i2cBufferWrite[0] = command;
-        while(I2CMasterBusy(I2C_PERIPH_BASE));
-        if(I2CMWrite(  &i2cMastInst_s,                     // pointer to i2c master instance
+        while(I2CMasterBusy(I2C_PERIPH_BASE_ALT));
+        if(I2CMWrite(  &i2cMastInst2_s,                     // pointer to i2c master instance
                     ui8_i2cAdress,                      // I2C adress
                     ui8_i2cBufferWrite,                          // I2C message
                     1,                                  // message length
-                    I2CWriteFinishCallback,             // callback funktion (when message was sent)
+                    i2cAltWriteFinishCallback,             // callback funktion (when message was sent)
                     0) == 0)
         {
             // TODO implement blind landing sequence if program gets here i2c doesn't work correctly anymore
             while(1);
         }
-        while(I2CMasterBusy(I2C_PERIPH_BASE));
+        while(I2CMasterBusy(I2C_PERIPH_BASE_ALT));
+    }
+
+    static void i2cAltGetData(void)
+    {
+
+        if(ui8_i2cPressCounter == 5)
+        {
+           // save barometer values into variables
+
+           ui8_i2cPressCounter = 0;
+
+            // TODO can be used without if
+            if(ui8_i2cTempCounter == 0)
+            {
+                // read temperature value in OSC = 4096 (24 bit)
+                i2cAltBurstReadBlocking(READ_BARO, I2CBARO_ADDRESS, BARO_ADC_READ_COMMAND, ui8_i2cBufferRead, 3);
+
+            }
+            else
+            {
+                // read pressure value in OSC = 4096 (24 bit)
+                i2cAltBurstReadBlocking(READ_BARO, I2CBARO_ADDRESS, BARO_ADC_READ_COMMAND, ui8_i2cBufferRead, 3);
+            }
+
+           if(ui8_i2cTempCounter == 20)
+           {
+              // set temp counter to zero and require temp value
+              ui8_i2cTempCounter = 0;
+              i2cAltWrite(I2CBARO_ADDRESS, BARO_CONVER_TEMP_4096);
+           }
+           else
+           {   // require pressure value
+              i2cAltWrite(I2CBARO_ADDRESS, BARO_CONVER_PRESS_4096);
+           }
+
+        }
+
+        ui8_i2cPressCounter++;
 
     }
+
 
     // TODO test baro
     static baroData_s calculateBaroData(uint32_t t_baro, uint32_t p_baro, uint8_t calibrate){
@@ -834,14 +955,14 @@ static void correctIMUOffset(float* sensor_data,uint8_t calibrate){
 
         return altitude;
     }
-
+#endif
   	/**
 	 * \brief	Init the peripheral for the sensor driver
 	 */
 	void Sensor_InitPeriph(void)
 	{
 		BusyDelay_Init();
-		ROM_IntPrioritySet(periph_SENSOR_INT,    priority_SENSOR_ISR);		// I2C Sensorbus (MPU9150,BAro)
+		ROM_IntPrioritySet(periph_SENSOR_MPU_INT,    priority_SENSOR_ISR);		// I2C Sensorbus (MPU9150,BAro)
 
 		// Enable peripherial I2C
 		ROM_SysCtlPeripheralEnable(SYSCTL_PERIPH_I2C);
@@ -862,16 +983,16 @@ static void correctIMUOffset(float* sensor_data,uint8_t calibrate){
 
 
 		// i2c driver unit
-		I2CMInit(	&i2cMastInst_s,
+		I2CMInit(	&i2cMastInst1_s,
 					I2C_PERIPH_BASE,
-					periph_SENSOR_INT,
+					periph_SENSOR_MPU_INT,
 					0xff,
 					0xff,
 					ROM_SysCtlClockGet());
 
 		// enable interrupts
-		ROM_IntEnable(i2cMastInst_s.ui8Int);
-		ROM_I2CMasterIntEnableEx(i2cMastInst_s.ui32Base, I2C_MASTER_INT_DATA);
+		ROM_IntEnable(i2cMastInst1_s.ui8Int);
+		ROM_I2CMasterIntEnableEx(i2cMastInst1_s.ui32Base, I2C_MASTER_INT_DATA);
 
 		// set optional eventBits name
 		HIDE_Fault_SetEventName(fault_SENSOR,"Sen");
@@ -879,6 +1000,42 @@ static void correctIMUOffset(float* sensor_data,uint8_t calibrate){
 
         // workload estimation for I2C
         HIDE_Workload_EstimateCreate(&p_workHandle, "sI2C");
+
+    #if(ALTITUDE_INIT == 1)
+
+
+        ROM_IntPrioritySet(periph_SENSOR_ALT_INT,    priority_SENSOR_ALT_ISR);      // I2C Sensorbus (MPU9150,BAro)
+
+        // Enable peripherial I2C
+        ROM_SysCtlPeripheralEnable(SYSCTL_PERIPH_I2C_ALT);
+        ROM_SysCtlPeripheralEnable(SYSCTL_PERIPH_PORT_ALT);
+
+        // Set GPIOs as I2C pins.
+        ROM_GPIOPinConfigure(I2C_SCL_ALT);
+        ROM_GPIOPinConfigure(I2C_SDA_ALT);
+
+        // open drain with pullups
+        ROM_GPIOPinTypeI2C(PORT_BASE_ALT, SDA_PIN_ALT);
+        ROM_GPIOPinTypeI2CSCL(PORT_BASE_ALT, SCL_PIN_ALT);
+
+        // Set the Master Clock and choose fast mode (400 kbps)
+        ROM_I2CMasterInitExpClk(I2C_PERIPH_BASE_ALT, ROM_SysCtlClockGet(), true);
+
+        ROM_I2CMasterEnable(I2C_PERIPH_BASE_ALT);
+
+        // i2c driver unit
+        I2CMInit(   &i2cMastInst2_s,
+                    I2C_PERIPH_BASE_ALT,
+                    periph_SENSOR_ALT_INT,
+                    0xff,
+                    0xff,
+                    ROM_SysCtlClockGet());
+
+        // enable interrupts
+        ROM_IntEnable(i2cMastInst2_s.ui8Int);
+        ROM_I2CMasterIntEnableEx(i2cMastInst2_s.ui32Base, I2C_MASTER_INT_DATA);
+    #endif
+
 	}
 
 	/**
@@ -920,9 +1077,9 @@ static void correctIMUOffset(float* sensor_data,uint8_t calibrate){
                 uint8_t ASAY_val[1] = {0};
                 uint8_t ASAZ_val[1] = {0};
 
-                I2cBurstReadBlocking(READ_MAGNET,MAGNET_ADRESS,MAGNET_ASAX, ASAX_val, 1);
-                I2cBurstReadBlocking(READ_MAGNET,MAGNET_ADRESS,MAGNET_ASAY, ASAY_val, 1);
-                I2cBurstReadBlocking(READ_MAGNET,MAGNET_ADRESS,MAGNET_ASAZ, ASAZ_val, 1);
+                i2cMpuBurstReadBlocking(READ_MAGNET,MAGNET_ADRESS,MAGNET_ASAX, ASAX_val, 1);
+                i2cMpuBurstReadBlocking(READ_MAGNET,MAGNET_ADRESS,MAGNET_ASAY, ASAY_val, 1);
+                i2cMpuBurstReadBlocking(READ_MAGNET,MAGNET_ADRESS,MAGNET_ASAZ, ASAZ_val, 1);
 
             #endif
 
@@ -939,13 +1096,12 @@ static void correctIMUOffset(float* sensor_data,uint8_t calibrate){
 
                 uint8_t ui8_selftest_val[7];
 
-                I2cBurstReadBlocking(READ_MAGNET,MAGNET_ADRESS,MAGNET_HXL, ui8_selftest_val, 7);
+                i2cMpuBurstReadBlocking(READ_MAGNET,MAGNET_ADRESS,MAGNET_HXL, ui8_selftest_val, 7);
 
                 s_rawData.x_magnet = (ui8_selftest_val[1]<<8) + ui8_selftest_val[0];
                 s_rawData.y_magnet = (ui8_selftest_val[3]<<8) + ui8_selftest_val[2];
                 s_rawData.z_magnet = (ui8_selftest_val[5]<<8) + ui8_selftest_val[4];
 
-                e_sensorReadState=READY;
 
                 i2cMpuWrite(MAGNET_ADRESS,MAGNET_ASTC, MAGNET_SELFTEST_BIT_OFF);
 
@@ -962,10 +1118,10 @@ static void correctIMUOffset(float* sensor_data,uint8_t calibrate){
 		#endif
 
         // TODO test baro
-        #if (BARO_INIT == 1)
+        #if (ALTITUDE_INIT == 1)
 
             // perform reset of Barometer
-            i2cBaroWrite(BARO_ADDRESS, BARO_RESET);
+            i2cAltWrite(I2CBARO_ADDRESS, BARO_RESET);
 
             // Delay after Reset before reading prom
             BusyDelay_Ms(15);
@@ -976,7 +1132,7 @@ static void correctIMUOffset(float* sensor_data,uint8_t calibrate){
 
             for(i = 1; i <=6; i++)
             {
-                I2cBurstReadBlocking(READ_BARO, BARO_ADDRESS, BARO_PROM_READ + i*2, ui8_i2cBufferRead, 2);
+                i2cAltBurstReadBlocking(READ_BARO, I2CBARO_ADDRESS, BARO_PROM_READ + i*2, ui8_i2cBufferRead, 2);
 
                 ui8_i2cBufferRead[j] = ui8_i2cBufferRead[0];
 
@@ -988,24 +1144,24 @@ static void correctIMUOffset(float* sensor_data,uint8_t calibrate){
                 ui16_baro_calibration[i-1] |= ui8_i2cBufferRead[j];
                 j++;
 
-                e_sensorReadState=READY;
+
 
             }
 
             // get 100 barometer tempeteratur readings in set-up because barometer needs some time to send correct value
             for(i=0; i<100; i++)
             {
-                i2cBaroWrite(BARO_ADDRESS, BARO_CONVER_TEMP_4096);
+                i2cAltWrite(I2CBARO_ADDRESS, BARO_CONVER_TEMP_4096);
                 BusyDelay_Ms(10);
-                I2cBurstReadBlocking(READ_BARO, BARO_ADDRESS, BARO_ADC_READ_COMMAND, ui8_i2cBufferRead, 3);
+                i2cAltBurstReadBlocking(READ_BARO, I2CBARO_ADDRESS, BARO_ADC_READ_COMMAND, ui8_i2cBufferRead, 3);
                 BusyDelay_Ms(1);
-                i2cBaroWrite(BARO_ADDRESS, BARO_CONVER_PRESS_4096);
+                i2cAltWrite(I2CBARO_ADDRESS, BARO_CONVER_PRESS_4096);
                 BusyDelay_Ms(10);
-                I2cBurstReadBlocking(READ_BARO, BARO_ADDRESS, BARO_ADC_READ_COMMAND, ui8_i2cBufferRead, 3);
+                i2cAltBurstReadBlocking(READ_BARO, I2CBARO_ADDRESS, BARO_ADC_READ_COMMAND, ui8_i2cBufferRead, 3);
                 BusyDelay_Ms(1);
             }
 
-            i2cBaroWrite(BARO_ADDRESS, BARO_CONVER_TEMP_4096);
+            i2cAltWrite(I2CBARO_ADDRESS, BARO_CONVER_TEMP_4096);
 
             ui8_baroSetupFlag = 1;
         #endif
@@ -1021,6 +1177,7 @@ static void correctIMUOffset(float* sensor_data,uint8_t calibrate){
 	{
 		// Read out sensor data and perform formatting
 		float sensor_data[9];
+		float alt_data[3];
 
 		// Get MPU data and also barometer raw values and convert and collect correction data it
 		i2cGetMpuData(sensor_data);
@@ -1028,13 +1185,16 @@ static void correctIMUOffset(float* sensor_data,uint8_t calibrate){
 		convertIMUData(sensor_data);
         correctIMUOffset(sensor_data, 1);
 
+    #if(ALTITUDE_INIT)
 		//For calibration the barometer has to be read a few times so that the right temperature is measured (nothing special just reading)
 		if(ui8_newPressValue == 1)
 		{
+		    i2cAltGetData();
 		    ui8_newPressValue = 0;
 		    calculateBaroData(s_rawData.t_baro, s_rawData.p_baro, 1);
 		    calculateAltitude(s_baroData, 0, 1);
 		}
+    #endif
 
 	}
 
@@ -1071,8 +1231,11 @@ static void correctIMUOffset(float* sensor_data,uint8_t calibrate){
 
 
         // calculate correct pressure for altitude control only every 10ms (5 loops) because conversion takes around >9ms
+
+    #if(ALTITUDE_INIT)
         if(ui8_newPressValue == 1)
         {
+            i2cAltGetData();
             ui8_newPressValue = 0;
             s_baroData = calculateBaroData(s_rawData.t_baro, s_rawData.p_baro, 0);
             gf_sensor_pressure = s_baroData.f_pressure;
@@ -1081,6 +1244,7 @@ static void correctIMUOffset(float* sensor_data,uint8_t calibrate){
 
 
         }
+    #endif
 
 }
 

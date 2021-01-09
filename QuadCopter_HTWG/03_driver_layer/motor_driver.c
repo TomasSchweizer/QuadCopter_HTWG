@@ -202,10 +202,10 @@ void Motor_DrawDisplay(void)
 	/*				Local Type Definitions							*/
 	/* ------------------------------------------------------------ */
 
-	#if(periph_SENSOR_INT==periph_MOTOR_INT)
-			   tI2CMInstance i2cMastInst_s;				// I2C master instance
+	#if(periph_SENSOR_MPU_INT==periph_MOTOR_INT)
+			   tI2CMInstance i2cMastInst1_s;				// I2C master instance
 	#else
-		static tI2CMInstance i2cMastInst_s;				// I2C master instance
+		static tI2CMInstance i2cMastInst1_s;				// I2C master instance
 	#endif
 
 	static uint8_t ui8_msg[8];						// message for I2C
@@ -232,7 +232,7 @@ void Motor_DrawDisplay(void)
 	 */
 	void Motor_InitPeriph(void)
 	{
-		ROM_IntPrioritySet(periph_MOTOR_INT,    priority_MOTOR_ISR);
+		ROM_IntPrioritySet(periph_MOTOR_INT, priority_MOTOR_ISR);
 
 		// enable I2C peripheral
 		ROM_SysCtlPeripheralEnable(MOTOR_I2C_PERIPH);
@@ -249,21 +249,21 @@ void Motor_DrawDisplay(void)
 		ROM_GPIOPinTypeI2C(MOTOR_I2C_PORT_BASE, MOTOR_I2C_SDA_PIN);
 
 		// i2c driver unit
-		i2cMastInst_s.ui32Base = MOTOR_I2C_PERIPH_BASE;		// controller i2c modul adresse
-		i2cMastInst_s.ui8Int = periph_MOTOR_INT;		// int vector
-		i2cMastInst_s.ui8TxDMA = 0xff;			// no DMA
-		i2cMastInst_s.ui8RxDMA = 0xff;			// no DMA
-		i2cMastInst_s.ui8State = 0;				// beginning state idle
-		i2cMastInst_s.ui8ReadPtr = 0;
-		i2cMastInst_s.ui8WritePtr = 0;
+		i2cMastInst1_s.ui32Base = MOTOR_I2C_PERIPH_BASE;		// controller i2c modul adresse
+		i2cMastInst1_s.ui8Int = periph_MOTOR_INT;		// int vector
+		i2cMastInst1_s.ui8TxDMA = 0xff;			// no DMA
+		i2cMastInst1_s.ui8RxDMA = 0xff;			// no DMA
+		i2cMastInst1_s.ui8State = 0;				// beginning state idle
+		i2cMastInst1_s.ui8ReadPtr = 0;
+		i2cMastInst1_s.ui8WritePtr = 0;
 
 		// init i2c master module
 		// und den i2c speed
-		ROM_I2CMasterInitExpClk(i2cMastInst_s.ui32Base, ROM_SysCtlClockGet(), true);
+		ROM_I2CMasterInitExpClk(i2cMastInst1_s.ui32Base, ROM_SysCtlClockGet(), true);
 
 		// enable interrupts
-		ROM_IntEnable(i2cMastInst_s.ui8Int);
-		ROM_I2CMasterIntEnableEx(i2cMastInst_s.ui32Base, I2C_MASTER_INT_DATA);
+		ROM_IntEnable(i2cMastInst1_s.ui8Int);
+		ROM_I2CMasterIntEnableEx(i2cMastInst1_s.ui32Base, I2C_MASTER_INT_DATA);
 
         // reset Motor Overcurrent eventBit
         xEventGroupClearBits(gx_fault_EventGroup,fault_MOTOR_OVER_CURRENT);
@@ -511,7 +511,7 @@ void Motor_DrawDisplay(void)
 		{
 			// brushlesregler version 1
 			ui8_msg[0] = (uint8_t)ui32_speed;
-			I2CMWrite(	&i2cMastInst_s, 					// pointer to i2c master instance
+			I2CMWrite(	&i2cMastInst1_s, 					// pointer to i2c master instance
 						ESC_BASE_ADR + ui8_motorNr, 		// I2C adress
 						ui8_msg, 							// I2C message
 						1, 									// message length
@@ -529,7 +529,7 @@ void Motor_DrawDisplay(void)
 			ui8_msg[0] = (uint8_t)(ui32_speed >> 3) & 0xff; // gets the high byte [10->3]
 			ui8_msg[1] = ((uint8_t)ui32_speed % 8) & 0x07;  // gets the low 3 bits [3->0]
 			while(I2CMasterBusy(MOTOR_I2C_PERIPH_BASE));
-			I2CMWrite(	&i2cMastInst_s, 					// pointer to i2c master instance
+			I2CMWrite(	&i2cMastInst1_s, 					// pointer to i2c master instance
 						ESC_BASE_ADR + ui8_motorNr, 		// I2C adress
 						ui8_msg, 							// I2C message
 						2, 									// message length

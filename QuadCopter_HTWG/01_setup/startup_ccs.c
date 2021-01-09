@@ -73,6 +73,7 @@ extern void Dma_ErrorISR(void);
 #define HANDLER_GPIO_PORT_E					IntDefaultHandler
 #define HANDLER_I2C0_MASTER_AND_Slave		IntDefaultHandler
 #define HANDLER_I2C1_MASTER_AND_Slave		IntDefaultHandler
+#define HANDLER_I2C2_MASTER_AND_SLAVE       IntDefaultHandler
 #define HANDLER_I2C3_MASTER_AND_Slave		IntDefaultHandler
 #define HANDLER_TIMER2_A                    IntDefaultHandler
 #define HANDLER_USB0                        IntDefaultHandler
@@ -94,16 +95,21 @@ extern void Dma_ErrorISR(void);
 //
 //  Sensor ISRs
 //
-#if   ( periph_SENSOR_INT == INT_I2C1 )
-	extern void Sensor_I2CIntHandler(void);
+#if   ( periph_SENSOR_MPU_INT == INT_I2C1 )
+	extern void Sensor_MpuI2CIntHandler(void);
 	#undef  HANDLER_I2C1_MASTER_AND_Slave
-	#define HANDLER_I2C1_MASTER_AND_Slave 		Sensor_I2CIntHandler
-#elif ( periph_SENSOR_INT == INT_I2C3 &&  setup_SENSOR_I2C_PORT == (setup_SENSOR&setup_MASK_OPT1)  )
+	#define HANDLER_I2C1_MASTER_AND_Slave 		Sensor_MpuI2CIntHandler
+#elif ( periph_SENSOR_MPU_INT == INT_I2C3 &&  setup_SENSOR_I2C_PORT == (setup_SENSOR&setup_MASK_OPT1)  )
 	extern void I2C3IntHandler(void);
 	#undef  HANDLER_I2C3_MASTER_AND_Slave
 	#define HANDLER_I2C3_MASTER_AND_Slave 		I2C3IntHandler
 #endif
 
+#if ( periph_SENSOR_ALT_INT == INT_I2C2)
+    extern void Sensor_AltI2CIntHandler(void);
+    #undef  HANDLER_I2C1_MASTER_AND_Slave
+    #define HANDLER_I2C1_MASTER_AND_Slave       Sensor_AltI2CIntHandler
+#endif
 //
 //  Remote Control ISRs
 //
@@ -228,7 +234,7 @@ void (* const g_pfnVectors[])(void) =
     0,                                      // Reserved
     0,                                      // Reserved
     0,                                      // Reserved
-    IntDefaultHandler,                      // I2C2 Master and Slave
+    HANDLER_I2C2_MASTER_AND_SLAVE,                      // I2C2 Master and Slave
 	HANDLER_I2C3_MASTER_AND_Slave,          // I2C3 Master and Slave
     IntDefaultHandler,                      // Timer 4 subtimer A
     IntDefaultHandler,                      // Timer 4 subtimer B

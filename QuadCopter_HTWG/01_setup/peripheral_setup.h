@@ -45,7 +45,8 @@
 //
 #if   ( setup_SENSOR_I2C == (setup_SENSOR&setup_MASK_OPT1) )
 
-	#define periph_SENSOR_INT 					INT_I2C1 		// motor driver can share I2C with sensor
+	#define periph_SENSOR_MPU_INT 					INT_I2C1 		// motor driver can share I2C with sensor
+    #define periph_SENSOR_ALT_INT                   INT_I2C2
 
 #endif
 
