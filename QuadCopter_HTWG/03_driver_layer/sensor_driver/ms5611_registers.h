@@ -1,29 +1,42 @@
 //=====================================================================================================
-// MadgwickAHRS.h
+// @file ms5611_registers.h
 //=====================================================================================================
 //
-// Implementation of Madgwick's AHRS algorithm.
+// @brief List of used registers from MS5611
 //
-// Date			Author          Notes
-// 29/09/2011	SOH Madgwick    Initial release
-// 02/10/2011	SOH Madgwick	Optimised for reduced CPU load
-// 06/12/2020   Tomas Schweizer Overall changes to fit to application HTWG-QC
+// Date                 Author                      Notes
+// @date 06/12/2020     @author Tomas Schweizer     Implementation
 //
 // Source:
-// http://www.x-io.co.uk/node/8#open_source_ahrs_and_imu_algorithms
+// Data_Sheet MS5611 Barometer
+//
 //=====================================================================================================
 
-#ifndef __MADGWICKAHRS_H__
-#define __MADGWICKAHRS_H__
+#ifndef MS5611_REGISTERS_H_
+#define MS5611_REGISTERS_H_
 
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                     Include File Definitions                                       */
 /* ---------------------------------------------------------------------------------------------------*/
-#include <stdint.h>
 
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                      Defines                                                       */
 /* ---------------------------------------------------------------------------------------------------*/
+// i2c address of the MS5611
+#define MS5611_ADDRESS                  0x77
+
+// MS5611 commands and registers
+#define MS5611_ADC_READ_COMMAND         0x00 // To read out conversion result
+#define MS5611_RESET                    0x1E //Needs to be called at start-up
+#define MS5611_PROM_READ                0xA0 // Needs to be read out to get 6 calibration values before start-up
+/*
+ * The calibration values lie at: 0xA0 to 0xAE
+ * In this application we read them in 2 uint8 values at a time
+ */
+
+// options
+#define MS5611_CONVER_PRESS_4096        0x48 // Conversion request for pressure with precision OSR=4096
+#define MS5611_CONVER_TEMP_4096         0x58 // Conversion request for temperature with precision OSR=4096
 
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                      Type Definitions                                              */
@@ -36,10 +49,15 @@
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                      API Procedure Definitions                                     */
 /* ---------------------------------------------------------------------------------------------------*/
-extern void MadgwickAHRSupdate(float ax, float ay, float az, float gx, float gy, float gz, float mx, float my, float mz, volatile float q[4], volatile float qDot[4], float dt);
 
-#endif  // __MADGWICKAHRS_H__
+#endif /* MS5611_REGISTERS_H_ */
 
 //=====================================================================================================
 // End of file
 //=====================================================================================================
+
+
+
+
+
+

@@ -37,6 +37,7 @@ extern uint8_t Sensor_IsCalibrateRequired(void);
 extern void    Sensor_DrawDisplay(void);
 extern void    HIDE_Sensor_SendDataOverUSB (void);
 
+
 /* ------------------------------------------------------------ */
 /*					Global Variables							*/
 /* ------------------------------------------------------------ */

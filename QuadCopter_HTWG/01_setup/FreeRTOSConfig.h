@@ -31,7 +31,7 @@
 #define configUSE_16_BIT_TICKS              		0			// 0 -> uint32_t, 1 -> uint16_t    for time measurement
 #define configIDLE_SHOULD_YIELD             		0			// This parameter controls the behaviour of tasks at the idle priority.
 #define configMAX_PRIORITIES						priority_COUNT
-#define configUSE_IDLE_HOOK             			(setup_DEV_WORKLOAD_STATISTIC || setup_DEV_WORKLOAD_LED ) 			// function that is called during each cycle of the idle task -> common to use the idle hook function to place the microcontroller CPU into a power saving mode.
+#define configUSE_IDLE_HOOK             			(setup_DEV_WORKLOAD_STATISTIC || setup_DEV_WORKLOAD_LED ) 			// function that is called during each cycle of the idle task -> common to use the idle hook function to place the micro-controller CPU into a power saving mode.
 #if   ( setup_DEV_STACK_OVERFLOW )
 	#define configCHECK_FOR_STACK_OVERFLOW  		2			// 2 -> RTOS Kernel will colour the Stack and look at every context switch if the "colour has changed" -> vApplicationStackOverflowHook will be called  (this should only be used for development)
 #else
@@ -60,6 +60,9 @@
 	#define INCLUDE_uxTaskPriorityGet 				1
 #endif
 
+
+
+
 // Be ENORMOUSLY careful if you want to modify these two values and make sure
 // you read http://www.freertos.org/a00110.html#kernel_priority and
 // http://www.freertos.org/RTOS-Cortex-M3-M4.html first!
@@ -67,4 +70,6 @@
 #define configKERNEL_INTERRUPT_PRIORITY         	priority_KERNEL   // Priority 7, This is the lowest priority.
 #define configMAX_SYSCALL_INTERRUPT_PRIORITY   	 	priority_MAX_API_CALL_INTERRUPT   // Priority 1
 
+
 #endif // __FREERTOS_CONFIG_H__
+

@@ -63,32 +63,23 @@ extern uint32_t __STACK_TOP;
 extern void xPortPendSVHandler(void);
 extern void vPortSVCHandler(void);
 extern void xPortSysTickHandler(void);
-extern void Dma_ErrorISR(void);
+
 
 //
 //  Default ISRs
 //
-#define HANDLER_GPIO_PORT_C					IntDefaultHandler
-#define HANDLER_GPIO_PORT_D					IntDefaultHandler
 #define HANDLER_GPIO_PORT_E					IntDefaultHandler
-#define HANDLER_I2C0_MASTER_AND_Slave		IntDefaultHandler
-#define HANDLER_I2C1_MASTER_AND_Slave		IntDefaultHandler
-#define HANDLER_I2C3_MASTER_AND_Slave		IntDefaultHandler
+#define HANDLER_I2C1_MASTER_AND_SLAVE		IntDefaultHandler
 #define HANDLER_TIMER2_A                    IntDefaultHandler
 #define HANDLER_USB0                        IntDefaultHandler
 
 //
 //  Motor ISRs
 //
-#if   ( periph_MOTOR_INT == INT_I2C0 )
-	extern void Motor_I2CIntHandler(void);
-	#undef  HANDLER_I2C0_MASTER_AND_Slave
-	#define HANDLER_I2C0_MASTER_AND_Slave 		Motor_I2CIntHandler
-#endif
 #if ( periph_MOTOR_INT == INT_I2C1 )
 	extern void Motor_I2CIntHandler(void);
-	#undef  HANDLER_I2C1_MASTER_AND_Slave
-	#define HANDLER_I2C1_MASTER_AND_Slave 		Motor_I2CIntHandler
+	#undef  HANDLER_I2C1_MASTER_AND_SLAVE
+	#define HANDLER_I2C1_MASTER_AND_SLAVE 		Motor_I2CIntHandler
 #endif
 
 //
@@ -96,22 +87,14 @@ extern void Dma_ErrorISR(void);
 //
 #if   ( periph_SENSOR_INT == INT_I2C1 )
 	extern void Sensor_I2CIntHandler(void);
-	#undef  HANDLER_I2C1_MASTER_AND_Slave
-	#define HANDLER_I2C1_MASTER_AND_Slave 		Sensor_I2CIntHandler
-#elif ( periph_SENSOR_INT == INT_I2C3 &&  setup_SENSOR_I2C_PORT == (setup_SENSOR&setup_MASK_OPT1)  )
-	extern void I2C3IntHandler(void);
-	#undef  HANDLER_I2C3_MASTER_AND_Slave
-	#define HANDLER_I2C3_MASTER_AND_Slave 		I2C3IntHandler
+	#undef  HANDLER_I2C1_MASTER_AND_SLAVE
+	#define HANDLER_I2C1_MASTER_AND_SLAVE 		Sensor_I2CIntHandler
 #endif
 
 //
 //  Remote Control ISRs
 //
-#if ( periph_REMOTE_INT   == INT_GPIOC )
-	extern void RemoteControl_CppmIntHandler(void);
-	#undef  HANDLER_GPIO_PORT_C
-	#define HANDLER_GPIO_PORT_C 				RemoteControl_CppmIntHandler
-#elif ( periph_REMOTE_INT   == INT_GPIOE )
+#if ( periph_REMOTE_INT   == INT_GPIOE )
 	extern void RemoteControl_CppmIntHandler(void);
 	#undef  HANDLER_GPIO_PORT_E
 	#define HANDLER_GPIO_PORT_E 				RemoteControl_CppmIntHandler
@@ -162,13 +145,13 @@ void (* const g_pfnVectors[])(void) =
     xPortSysTickHandler,                    // The SysTick handler
     IntDefaultHandler,                      // GPIO Port A
     IntDefaultHandler,                      // GPIO Port B
-	HANDLER_GPIO_PORT_C,                      // GPIO Port C
-	HANDLER_GPIO_PORT_D,                      // GPIO Port D
+    IntDefaultHandler,                      // GPIO Port C
+    IntDefaultHandler,                      // GPIO Port D
 	HANDLER_GPIO_PORT_E,                      // GPIO Port E
 	IntDefaultHandler,                      // UART0 Rx and Tx
     IntDefaultHandler,                      // UART1 Rx and Tx
     IntDefaultHandler,                      // SSI0 Rx and Tx
-	HANDLER_I2C0_MASTER_AND_Slave,            // I2C0 Master and Slave
+    IntDefaultHandler,                      // I2C0 Master and Slave
     IntDefaultHandler,                      // PWM Fault
     IntDefaultHandler,                      // PWM Generator 0
     IntDefaultHandler,                      // PWM Generator 1
@@ -197,17 +180,17 @@ void (* const g_pfnVectors[])(void) =
     IntDefaultHandler,                      // SSI1 Rx and Tx
     IntDefaultHandler,                      // Timer 3 subtimer A
     IntDefaultHandler,                      // Timer 3 subtimer B
-	HANDLER_I2C1_MASTER_AND_Slave,         // I2C1 Master and Slave
+	HANDLER_I2C1_MASTER_AND_SLAVE,          // I2C1 Master and Slave
     IntDefaultHandler,                      // Quadrature Encoder 1
     IntDefaultHandler,                      // CAN0
     IntDefaultHandler,                      // CAN1
     0,                                      // Reserved
     0,                                      // Reserved
     IntDefaultHandler,                      // Hibernate
-    HANDLER_USB0,                      // USB0
+    HANDLER_USB0,                           // USB0
     IntDefaultHandler,                      // PWM Generator 3
 	IntDefaultHandler,                      // uDMA Software Transfer
-	Dma_ErrorISR,                      // uDMA Error
+	IntDefaultHandler,                      // uDMA Error
     IntDefaultHandler,                      // ADC1 Sequence 0
     IntDefaultHandler,                      // ADC1 Sequence 1
     IntDefaultHandler,                      // ADC1 Sequence 2
@@ -229,7 +212,7 @@ void (* const g_pfnVectors[])(void) =
     0,                                      // Reserved
     0,                                      // Reserved
     IntDefaultHandler,                      // I2C2 Master and Slave
-	HANDLER_I2C3_MASTER_AND_Slave,          // I2C3 Master and Slave
+    IntDefaultHandler,                      // I2C3 Master and Slave
     IntDefaultHandler,                      // Timer 4 subtimer A
     IntDefaultHandler,                      // Timer 4 subtimer B
     0,                                      // Reserved

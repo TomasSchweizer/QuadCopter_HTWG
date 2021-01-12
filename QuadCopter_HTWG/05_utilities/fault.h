@@ -35,7 +35,7 @@
 // Bit order is irrelevant (but in range 0 ... fault_COUNT-1)
 /** \brief	maximum Number of used fault eventBits (max 24)
  * 	\note	all fault eventBits are set by default */
-#define fault_COUNT						( 6 )						// 24 bits max
+#define fault_COUNT						( 5 )						// 24 bits max
 /** \brief	REMOTE fault eventBit */
 #define fault_REMOTE_CONTROL			( 1 << 0 )
 /** \brief	AUTOPILOT fault eventBit */
@@ -44,10 +44,10 @@
 #define fault_TELEMETRIE				( 1 << 2 )
 /** \brief	MOTOR fault eventBit */
 #define fault_MOTOR						( 1 << 3 )
-/** \brief	MOTOR_OVER_CURRENT fault eventBit */
-#define fault_MOTOR_OVER_CURRENT		( 1 << 4 )
 /** \brief	SENSOR fault eventBit */
-#define fault_SENSOR					( 1 << 5 )
+#define fault_SENSOR					( 1 << 4 )
+
+
 
 /* ------------------------------------------------------------ */
 /*				   	Type Definitions			    			*/

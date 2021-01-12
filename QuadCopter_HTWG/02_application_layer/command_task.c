@@ -95,8 +95,6 @@ static void UpdateStuff(void* p_parameter)
 {
 	HIDE_Display_Redraw();
 	HIDE_Debug_USB_Com();
-
-	// TODO insert USB HIDE_FUnction
 }
 
 /**
@@ -121,7 +119,6 @@ static void UpdateTimerCallback(TimerHandle_t xTimer)
 uint32_t CommandTask_Init(void)
 {
 	HIDE_Display_Init();
-
 	// gets kicked from compiler if uart is not choosen
 	HIDE_Debug_InterfaceInit();
 
@@ -132,7 +129,6 @@ uint32_t CommandTask_Init(void)
 		HIDE_Display_InsertDrawFun(HIDE_Workload_DrawDisplay);
 		HIDE_Display_InsertDrawFun(HIDE_Fault_DrawDisplay);
 	#endif
-
 
 	//
 	// Create a timer, which inserts every x ms a UpdateFunktion into the Command Queue

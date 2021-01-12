@@ -17,7 +17,8 @@
 /* ------------------------------------------------------------ */
 /*				   	Defines			    						*/
 /* ------------------------------------------------------------ */
-
+/** \brief  MOTOR_DATA receiver eventBit*/
+#define written_MOTOR_DATA                  ( 2 << 0 )
 /** \brief	Number of Motors */
 #define motor_COUNT		( 4 )
 
@@ -61,7 +62,6 @@ void HIDE_Motor_SendDataOverUSB(void);
 /* ------------------------------------------------------------ */
 /*					Global Variables							*/
 /* ------------------------------------------------------------ */
-
 extern volatile motor_Data_s gs_motor[motor_COUNT];
 extern volatile uint32_t 	 gui32_motor_fault;
 

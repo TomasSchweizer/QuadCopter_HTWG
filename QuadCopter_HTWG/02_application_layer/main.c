@@ -51,6 +51,9 @@ int main(void)
 	// Wait for clock to stabilize
 	ROM_SysCtlDelay(ROM_SysCtlClockGet() / 12);
 
+	//TODO just debugging
+
+
 	//
 	//	Default Applications
 	//

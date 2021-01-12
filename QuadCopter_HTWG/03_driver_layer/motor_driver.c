@@ -40,7 +40,6 @@
 /*				Local Defines									*/
 /* ------------------------------------------------------------ */
 
-#define MOTOR_OVER_CURRENT		0xFF		// 16Bit
 #define MOTOR_MAPPING			{0,1,2,3}	// Order of the motors
 
 /* ------------------------------------------------------------ */
@@ -50,12 +49,13 @@
 void Motor_InitPeriph(void);
 void Motor_OutputAll(void);
 void Motor_StopAll(void);
-void Motor_Read(uint8_t ui8_motorNr);
-void Motor_ReadAll(void);
 
 /* ------------------------------------------------------------ */
 /*				Global Variables								*/
 /* ------------------------------------------------------------ */
+extern volatile EventGroupHandle_t gx_fault_EventGroup;
+volatile EventGroupHandle_t gx_motor_EventGroup;
+
 
 /**
  * \brief	Array to store information of all motors
@@ -73,15 +73,6 @@ volatile motor_Data_s gs_motor[motor_COUNT];
  */
 volatile uint32_t 	  gui32_motor_fault=0;
 
-/**
- * \brief	over current information for all Motors
- *
- * 			every motor has one bit. It will be set, if there
- *			is a over current, and cleared when the over current is gone.
- *			(see MOTOR_MAPPING for bit-Order)
- * \note	Write access:	read-ISR of the motor driver (### not implemented yet)
- */
- volatile uint32_t 	  gui32_motor_overCurrent=0;
 
 /* ------------------------------------------------------------ */
 /*				Local Variables									*/
@@ -149,28 +140,24 @@ void Motor_DrawDisplay(void)
 	//  I2C
 	#define I2C_INCREMENTAL_MODE	(1)			// 1 -> start next I2C command in I2C ISR, 0 -> busy waiting between I2C commands
 	#define ESC_DATA_SIZE			(2047)		// esc daten  1 byte=255  2 byte=2047
-	#define ESC_I2C_SPEED			(1)			// 0 = 100kbit  1=400kbit
 	#define ESC_BASE_ADR			(0x29)		// simonk i2c base adr
 
-	/*  I2C Adress (Ist gerade noch nicht so!)
-	 * 	Write-Adress = I2C_BASE_ADR + MOTOR_NR * 2
-	 * 	Read -Adress = I2C_BASE_ADR + MOTOR_NR * 2 + 1
-	 * 	To init the ESCs sent 0 as set-point */
+	//To init the ESCs sent 0 as set-point */
 
 	#define I2C_MODE_READY			(-1)
 	#define I2C_MODE_BUSY			(0)
 
-	//  I2C read: byte Order
-	#define I2C_READ_CURRENT		(1 << 0)
-	#define I2C_READ_STATE			(1 << 1)
-	#define I2C_READ_TEMP			(1 << 2)
-	#define I2C_READ_RPM			(1 << 3)
-	#define I2C_READ_VOLT			(1 << 4)
-	//  I2C read: pack & unpack messages
-	#define SET_POINT2HIGH_BYTE(ui16_setPoint)	  ( (uint8_t)(ui16_setPoint >> 3) & 0xff )    				// first byte
-	#define SET_POINT2LOW_BYTE(ui16_setPoint)     ( ((uint8_t)(ui32_speed & 0x07 )  		  				// second byte
-	#define BYTES2SET_POINT(ui8_highB,ui8_lowB)   ( ((uint16_t)((ui8_highB << 3) | (ui8_lowB & 0x07)  )  	// low byte
-	#define LOW_BYTE_GET_MODE(ui8_lowB) 		  ( ui8_lowB & 0x80  )  									//  If highest bit = 0 -> normal mode, else esc-confic-mode
+//	//  I2C read: byte Order
+//	#define I2C_READ_CURRENT		(1 << 0)
+//	#define I2C_READ_STATE			(1 << 1)
+//	#define I2C_READ_TEMP			(1 << 2)
+//	#define I2C_READ_RPM			(1 << 3)
+//	#define I2C_READ_VOLT			(1 << 4)
+//	//  I2C read: pack & unpack messages
+//	#define SET_POINT2HIGH_BYTE(ui16_setPoint)	  ( (uint8_t)(ui16_setPoint >> 3) & 0xff )    				// first byte
+//	#define SET_POINT2LOW_BYTE(ui16_setPoint)     ( ((uint8_t)(ui32_speed & 0x07 )  		  				// second byte
+//	#define BYTES2SET_POINT(ui8_highB,ui8_lowB)   ( ((uint16_t)((ui8_highB << 3) | (ui8_lowB & 0x07)  )  	// low byte
+//	#define LOW_BYTE_GET_MODE(ui8_lowB) 		  ( ui8_lowB & 0x80  )  									//  If highest bit = 0 -> normal mode, else esc-confic-mode
 
 	//
 	// define the desired peripheral setup (see peripheral_setup.h)
@@ -211,7 +198,6 @@ void Motor_DrawDisplay(void)
 	static uint8_t ui8_msg[8];						// message for I2C
 
 	static volatile int8_t i8_i2cWriteNum;					// to store which Motor to write & for I2C_MODE_... defines
-	static volatile int8_t i8_i2cReadNum;			// to store which Motor to read & for I2C_MODE_... defines
 	static workload_handle_p p_workHandle;
 	/* ------------------------------------------------------------ */
 	/*				Forward Declarations							*/
@@ -219,7 +205,6 @@ void Motor_DrawDisplay(void)
 
 	void Motor_I2CIntHandler(void);  // ausprobieren, sich selber in Tabelle eintragen (macht das wirklich sinn)
 	static void I2CWriteFinishCallback(void *pvData, uint_fast8_t ui8Status);
-	static void I2CReadFinishCallback(void *pvData, uint_fast8_t ui8Status);
 	static void I2CWriteSpeed(uint8_t ui8_motorNr);
 
 
@@ -257,20 +242,12 @@ void Motor_DrawDisplay(void)
 		i2cMastInst_s.ui8ReadPtr = 0;
 		i2cMastInst_s.ui8WritePtr = 0;
 
-		// init i2c master module
-		// und den i2c speed
-		ROM_I2CMasterInitExpClk(i2cMastInst_s.ui32Base, ROM_SysCtlClockGet(), true);
-
-		// enable interrupts
-		ROM_IntEnable(i2cMastInst_s.ui8Int);
-		ROM_I2CMasterIntEnableEx(i2cMastInst_s.ui32Base, I2C_MASTER_INT_DATA);
-
-        // reset Motor Overcurrent eventBit
-        xEventGroupClearBits(gx_fault_EventGroup,fault_MOTOR_OVER_CURRENT);
+		// reset Motor Overcurrent eventBit
+        xEventGroupClearBits(gx_fault_EventGroup,fault_MOTOR);
 
 		// set optional eventBit name
 		HIDE_Fault_SetEventName(fault_MOTOR,"Mot");
-		HIDE_Fault_SetEventName(fault_MOTOR_OVER_CURRENT,"MOC");
+
 
         // workload estimation for I2C
         HIDE_Workload_EstimateCreate(&p_workHandle, "mI2C");
@@ -304,38 +281,41 @@ void Motor_DrawDisplay(void)
 	 *			else clear the bit.
 	 * \note    Events: EventBit fault_MOTOR will be set or cleared in gx_fault_EventGroup
 	 */
+	// TODO try to add blocking because else motor command can come in the next task
 	void Motor_OutputAll(void)
 	{
-		if (i8_i2cWriteNum != I2C_MODE_READY)
-		{
-			// this should never happen!
-			// you come here, when you want to OutputAll Motors and the last OutputAll Command is not finished.
-			//while(1);
-		}
-		else
-		{
-			// if any motor has a fault, set EventBit for motor fault
-			if(gui32_motor_fault)
-				xEventGroupSetBits(gx_fault_EventGroup,fault_MOTOR);
-			else
-				xEventGroupClearBits(gx_fault_EventGroup,fault_MOTOR);
-			HIDE_Fault_Increment(fault_MOTOR,gui32_motor_fault);
 
-			HIDE_Workload_EstimateStart(p_workHandle);
-			#if(I2C_INCREMENTAL_MODE)
-				i8_i2cWriteNum = I2C_MODE_BUSY;		// start next i2c write command in i2c callback
-				I2CWriteSpeed(ui8_motorMap[0]); 	// write to the first motor
-			#else
-				while(I2CMasterBusy(MOTOR_I2C_PERIPH_BASE));
-				uint8_t i;
-				for(i=0;i<motor_COUNT;++i)
-				{
-					I2CWriteSpeed(ui8_motorMap[i]);
-					while(I2CMasterBusy(MOTOR_I2C_PERIPH_BASE));
-				}
-				HIDE_Workload_EstimateStop(p_workHandle);
-			#endif
-		}
+
+//		if (i8_i2cWriteNum != I2C_MODE_READY)
+//		{
+//			// this should never happen!
+//			// you come here, when you want to OutputAll Motors and the last OutputAll Command is not finished.
+//			while(1);
+//		}
+//		else
+//		{
+//			// if any motor has a fault, set EventBit for motor fault
+//			if(gui32_motor_fault)
+//				xEventGroupSetBits(gx_fault_EventGroup,fault_MOTOR);
+//			else
+//				xEventGroupClearBits(gx_fault_EventGroup,fault_MOTOR);
+//			HIDE_Fault_Increment(fault_MOTOR,gui32_motor_fault);
+//
+//			//HIDE_Workload_EstimateStart(p_workHandle);
+//			#if(I2C_INCREMENTAL_MODE)
+//				i8_i2cWriteNum = I2C_MODE_BUSY;		// start next i2c write command in i2c callback
+//				I2CWriteSpeed(ui8_motorMap[0]); 	// write to the first motor
+//			#else
+//				while(I2CMasterBusy(MOTOR_I2C_PERIPH_BASE));
+//				uint8_t i;
+//				for(i=0;i<motor_COUNT;++i)
+//				{
+//					I2CWriteSpeed(ui8_motorMap[i]);
+//					while(I2CMasterBusy(MOTOR_I2C_PERIPH_BASE));
+//				}
+//				HIDE_Workload_EstimateStop(p_workHandle);
+//			#endif
+//		}
 	}
 
 	/**
@@ -364,56 +344,7 @@ void Motor_DrawDisplay(void)
 	 * \note    NOT TESTED AND IMPLEMENTED FINISHED
 	 * 			Events: EventBit fault_MOTOR_OVER_CURRENT will be set or cleared in gx_fault_EventGroup
 	 */
-	void Motor_Read(uint8_t ui8_motorNr)
-	{
-//		if (i8_i2cReadNum != I2C_MODE_READY)
-//		{
-//			// this should never happen!
-//			// you come here, when you want to read a Motor and the last read command is not finished.
-//			while(1);
-//		}
-//		else
-//		{
-//			// if any motor has over current, set EventBit for over current
-//			if(gui32_motor_overCurrent)
-//				xEventGroupSetBits(gx_fault_EventGroup,fault_MOTOR_OVER_CURRENT);
-//			else
-//				xEventGroupClearBits(gx_fault_EventGroup,fault_MOTOR_OVER_CURRENT);
 
-//			I2CMRead(&i2cMastInst_s, 										// pointer to i2c master instance
-//								ESC_BASE_ADR + ui8_motorMap[ui8_motorNr], 				// I2C adress ### Adresse zum lesen ist eine andere wie zum schreiben!
-//
-//								(uint8_t *)& gs_motor[ui8_motorMap[i8_i2cWriteNum]].ui8_current, 	// I2C message
-//								2, 														// message length
-//								I2CReadFinishCallback, 										// callback funktion (when message was sent)
-//								0);
-																				// callback data
-//		}
-	}
-
-	/**
-	 * \brief	read all motors (non blocking)
-	 *
-	 *			(informations will be stored in gs_motor)
-	 *			fire eventBit fault_MOTOR_OVER_CURRENT if there is a fault,
-	 *			else clear the bit.
-	 * \note    NOT TESTED AND NOT IMPLEMENTED
-	 * 			Events: EventBit fault_MOTOR_OVER_CURRENT will be set or cleared in gx_fault_EventGroup
-	 */
-	void Motor_ReadAll(void)
-	{
-		// vermutlich besser nicht alle zu machen, sondert Task fragt in jeder Runde nur einen ab (I2C entlasten, und Info muss nicht sofort da sein)
-	}
-
-	/**
-	 * \brief	when I2C trnsactions have completed, this funktion is called
-	 *			in the context of the I2C master interrupthandler.
-	 *
-	 *			when it es commanded, a new I2C message will be started.
-	 *			store in gui32_motor_fault which motor has a fault
-	 * \param	pvData		not used
-	 * \param	ui8_status	status to find error in I2C transmission
-	 */
 	static void I2CWriteFinishCallback(void *pvData, uint_fast8_t ui8_status)
 	{
 		// is there  an error in I2C transmission?
@@ -428,51 +359,20 @@ void Motor_DrawDisplay(void)
 			gui32_motor_fault &= ~( 1 << ui8_motorMap[i8_i2cWriteNum] );
 		}
 
-		// TODO change back to right motor control
-//		i8_i2cWriteNum++;  // increment motor Number to adress the next motor
-//		if(i8_i2cWriteNum<motor_COUNT)
-//		{
-//			I2CWriteSpeed(ui8_motorMap[i8_i2cWriteNum]);
-//		}
-		i8_i2cWriteNum++;
+		i8_i2cWriteNum++;  // increment motor Number to adress the next motor
 		if(i8_i2cWriteNum<motor_COUNT)
 		{
-		    I2CWriteSpeed(ui8_motorMap[i8_i2cWriteNum]);
+			I2CWriteSpeed(ui8_motorMap[i8_i2cWriteNum]);
 		}
 		else // all motors have been updated
 		{
 			// I2C finish
 			i8_i2cWriteNum=I2C_MODE_READY;
 
-			HIDE_Workload_EstimateStop(p_workHandle);
+			//HIDE_Workload_EstimateStop(p_workHandle);
 		}
 	}
 
-	/**
-	 * \brief	when I2C trnsactions have completed, this funktion is called
-	 *			in the context of the I2C master interrupthandler.
-	 *
-	 *			when it es commanded, a new I2C read will be started.
-	 * \param	pvData		not used
-	 * \param	ui8_status	status to find error in I2C transmission
-	 * \note    NOT TESTED AND NOT IMPLEMENTED
-	 */
-	static void I2CReadFinishCallback(void *pvData, uint_fast8_t ui8_status)
-	{
-		// over current at the motor?
-		if( gs_motor[ui8_motorMap[i8_i2cReadNum]].f_current >= MOTOR_OVER_CURRENT)
-		{
-			// store motor has a over current
-			gui32_motor_overCurrent |= ( 1 << ui8_motorMap[i8_i2cReadNum] );
-		}
-		else
-		{
-			// store motor hasn't a over current
-			gui32_motor_overCurrent &= ~( 1 << ui8_motorMap[i8_i2cReadNum] );
-		}
-
-		i8_i2cReadNum=I2C_MODE_READY;
-	}
 
 	/**
 	 * \brief	ISR for I2C
@@ -481,7 +381,7 @@ void Motor_DrawDisplay(void)
 	 */
 	void Motor_I2CIntHandler(void)
 	{
-//		I2CMIntHandler(&i2cMastInst_s);
+		I2CMIntHandler(&i2cMastInst_s);
 	}
 
 	/**
@@ -506,43 +406,43 @@ void Motor_DrawDisplay(void)
 
 		// TODO delete later send motor data over USB
 		ui16_motorDataUsb[ui8_motorNr] = (uint16_t) ui32_speed;
-
-		if(ESC_DATA_SIZE == 255)
-		{
-			// brushlesregler version 1
-			ui8_msg[0] = (uint8_t)ui32_speed;
-			I2CMWrite(	&i2cMastInst_s, 					// pointer to i2c master instance
-						ESC_BASE_ADR + ui8_motorNr, 		// I2C adress
-						ui8_msg, 							// I2C message
-						1, 									// message length
-						#if(I2C_INCREMENTAL_MODE)
-							I2CWriteFinishCallback, 		// callback funktion (when message was send)
-						#else
-							0,								// no callback funktion
-						#endif
-						0);									// callback data
-		}
-		else
-		{
-			// brushless version >= 2.0
-			// Speed in 2 bytes (11bits) umwandeln
-			ui8_msg[0] = (uint8_t)(ui32_speed >> 3) & 0xff; // gets the high byte [10->3]
-			ui8_msg[1] = ((uint8_t)ui32_speed % 8) & 0x07;  // gets the low 3 bits [3->0]
-			while(I2CMasterBusy(MOTOR_I2C_PERIPH_BASE));
-			I2CMWrite(	&i2cMastInst_s, 					// pointer to i2c master instance
-						ESC_BASE_ADR + ui8_motorNr, 		// I2C adress
-						ui8_msg, 							// I2C message
-						2, 									// message length
-						#if(I2C_INCREMENTAL_MODE)
-							I2CWriteFinishCallback, 		// callback funktion (when message was send)
-						#else
-							0,								// no callback funktion
-						#endif
-						0);
-			while(I2CMasterBusy(MOTOR_I2C_PERIPH_BASE));
-												// callback data
-
-		}
+//
+//		if(ESC_DATA_SIZE == 255)
+//		{
+//			// brushlesregler version 1
+//			ui8_msg[0] = (uint8_t)ui32_speed;
+//			I2CMWrite(	&i2cMastInst_s, 					// pointer to i2c master instance
+//						ESC_BASE_ADR + ui8_motorNr, 		// I2C adress
+//						ui8_msg, 							// I2C message
+//						1, 									// message length
+//						#if(I2C_INCREMENTAL_MODE)
+//							I2CWriteFinishCallback, 		// callback funktion (when message was send)
+//						#else
+//							0,								// no callback funktion
+//						#endif
+//						0);									// callback data
+//		}
+//		else
+//		{
+//			// brushless version >= 2.0
+//			// Speed in 2 bytes (11bits) umwandeln
+//			ui8_msg[0] = (uint8_t)(ui32_speed >> 3) & 0xff; // gets the high byte [10->3]
+//			ui8_msg[1] = ((uint8_t)ui32_speed % 8) & 0x07;  // gets the low 3 bits [3->0]
+//
+//			I2CMWrite(	&i2cMastInst_s, 					// pointer to i2c master instance
+//						ESC_BASE_ADR + ui8_motorNr, 		// I2C adress
+//						ui8_msg, 							// I2C message
+//						2, 									// message length
+//						#if(I2C_INCREMENTAL_MODE)
+//							I2CWriteFinishCallback, 		// callback funktion (when message was send)
+//						#else
+//							0,								// no callback funktion
+//						#endif
+//						0);
+//
+//												// callback data
+//
+//		}
 	}
 
 

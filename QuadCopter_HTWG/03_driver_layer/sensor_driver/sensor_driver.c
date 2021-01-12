@@ -1,139 +1,201 @@
-/**
- * 		@file 	sensor_driver.c
- * 		@brief	functions to interact with the 9-Axis Gyro+Accel+Magn sensor
- *//*	@author Tobias Grimm
- *//*
- *//*	@modifier Tomas Schweizer
- * 		@date 	24.11.2020	(last modified)
- */
+//=====================================================================================================
+// @file sensor_driver.c
+//=====================================================================================================
+//
+// @brief Implementation of Madgwick's AHRS algorithm.
+//
+// Date                 Author                      Notes
+// @date 31/05/2016     @author Tobias Grimm        Implementation
+// @date 06/12/2020     @author Tomas Schweizer     Overall changes
+//
+// Source:
+//
+//
+//=====================================================================================================
 
-/* ------------------------------------------------------------ */
-/*				Include File Definitions						*/
-/* ------------------------------------------------------------ */
-
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                     Include File Definitions                                       */
+/* ---------------------------------------------------------------------------------------------------*/
 #include <stdint.h>
-#include <stdbool.h>
-#include <math.h>
 
+// own header file
 #include "sensor_driver.h"
-//  Hardware Specific
-#include "inc/hw_memmap.h"
-#include "inc/hw_ints.h"
-#include "driverlib/sysctl.h"
-#include "driverlib/pin_map.h"
-#include "driverlib/gpio.h"
-#include "driverlib/rom.h"
-#include "sensorlib/i2cm_drv.h"
-#include "peripheral_setup.h"
 
 // setup
+#include "peripheral_setup.h"
 #include "prioritys.h"
 
 // drivers
-#include "basic_filters.h"
 #include "display_driver.h"
 #include "debug_interface.h"
 #include "MadgwickAHRS.h"
-
+#include "basic_filters.h"
 
 // utils
 #include "qc_math.h"
 #include "workload.h"
 #include "fault.h"
-
+#include "busy_delay.h"
 
 
 // FreeRTOS
 #include "FreeRTOS.h"
 #include "event_groups.h"
-#include "receiver_task.h"
 
 
 
-/* ------------------------------------------------------------ */
-/*				Local Defines									*/
-/* ------------------------------------------------------------ */
 
+
+
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                      Local Defines                                                 */
+/* ---------------------------------------------------------------------------------------------------*/
+#define SENSOR_INIT_TIMEOUT_MS      ( 10 )
 #define SENSOR_READ_TIMEOUT_MS		( 1 )
 
+
+#define CALIBRATE_MIN_TIME_MS               5000//###5000
+#define CALIBRATE_BEFORE_FIRST_START        -2
+#define CALIBRATE_STOP                      -1
+#define CALIBRATE_START                     0
+#define IS_CALIBRAE_REQUIRED(stateTime)     (stateTime>=0 || stateTime == -2)
+
+/** \brief  sensor eventBit*/
+#define event_SENSOR_BIT_COUNT                           ( 2 )
+#define event_RECEIVED_pf_sensorData                ( 1 << 0 )
+
 #define dt 0.002f
-#define PI 3.14159265358979323846f
 
-#define X_ACCEL		0
-#define Y_ACCEL		1
-#define Z_ACCEL		2
-#define X_GYRO		3
-#define Y_GYRO		4
-#define Z_GYRO		5
-#define X_MAGNET	6
-#define Y_MAGNET	7
-#define Z_MAGNET	8
-#define AXIS_COUNT	9
+enum sensorAxis_e{
 
-#define CALIBRATE_MIN_TIME_MS				5000//###5000
-#define CALIBRATE_BEFORE_FIRST_START		-2
-#define CALIBRATE_STOP						-1
-#define CALIBRATE_START						0
-#define IS_CALIBRAE_REQUIRED(stateTime)		(stateTime>=0 || stateTime == -2)
+    X_ACC,
+    Y_ACC,
+    Z_ACC,
+    X_GYRO,
+    Y_GYRO,
+    Z_GYRO,
+    X_MAG,
+    Y_MAG,
+    Z_MAG,
+    T_BARO,
+    P_BARO,
+    A_LIDAR
 
+};
 
-/* ------------------------------------------------------------ */
-/*				Forward Declarations							*/
-/* ------------------------------------------------------------ */
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                      Local Type Definitions                                        */
+/* ---------------------------------------------------------------------------------------------------*/
 
-/* ------------------------------------------------------------ */
-/*				Global Variables								*/
-/* ------------------------------------------------------------ */
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                      Forward Declarations                                          */
+/* ---------------------------------------------------------------------------------------------------*/
 
-float volatile gf_sensor_attitudeQuaternion[4] = {1.0, 0.0, 0.0, 0.0};
+#if ( setup_DEV_SUM_RECEIVS )
+    extern void HIDE_senMesRec_SetEventName(uint32_t ui32_eventBit,const char* pc_name);
+    extern void HIDE_senMesRec_DrawDisplay(void);
+    extern void HIDE_senMesRec_Increment(uint32_t ui32_receiveEventBit);
+#else
+    #define HIDE_senMesRec_SetEventName(ui32_eventBit,pc_name)            // this define will be kicked off from the preprocessor
+    #define HIDE_senMesRec_DrawDisplay                            0       // 0 pointer
+    #define HIDE_senMesRec_Increment(ui32_receiveEventBit)
+#endif
+
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                      Global Variables                                              */
+/* ---------------------------------------------------------------------------------------------------*/
+volatile float gf_sensor_attitudeQuaternion[4] = {1.0, 0.0, 0.0, 0.0};
 volatile float gf_sensor_dotAttitudeQuaternion[4];
 float gf_sensor_fusedAngles[3];
 float gf_sensor_angularVelocity[3];
 float gf_sensor_pressure; // TODO maybe later just altitude global
 float gf_sensor_altitude;
 
-// TODO delete later USB debug variables
-float gf_usb_debug[9];
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                      Local Variables                                               */
+/* ---------------------------------------------------------------------------------------------------*/
+volatile EventGroupHandle_t gx_sensor_EventGroup = 0;
+// variable to check i2c workload
+static workload_handle_p p_workHandle;
+// count received sensor measurements
+countEdges_handle_p p_senMesRec_countEdges;
 
-/* ------------------------------------------------------------ */
-/*				Local Variables									*/
-/* ------------------------------------------------------------ */
 static int32_t i32_stateTime = CALIBRATE_BEFORE_FIRST_START;
 
-// struct for low pass filtering of acc data
-struct lp_a_struct lp_offsets = {
-		.alpha = LP_FREQ2ALPHA(0.3f, dt)
-};
-
-// variables for calibrating gyro
-static float f_gyro_cal[3] = { 0.0, 0.0, 0.0};
-static float f_index = 0;
-
-
-// Magnetometer calibration data
-static float f_mag_calibration_b[3] = { -37.8932,   -3.4380,  -66.0203};
-static float f_mag_calibration_A[9] = { 1.0296,         0.0,         0.0,
-                                        0.0,    0.9850,         0.0,
-                                        0.0,         0.0,    0.9861};
-
-// variable for barometer calibration values
-static uint16_t ui16_baro_calibration[6];
-
-
-// For display
-static const char* p_sign = " ";
-static const char* m_sign = "-";
-
-
-/* ------------------------------------------------------------ */
-/*				Procedure Definitions							*/
-/* ------------------------------------------------------------ */
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                      Procedure Definitions                                         */
+/* ---------------------------------------------------------------------------------------------------*/
 
 /**
- * \brief	Draw info about Sensor on the Display
+* \brief   send data of Sensor over USB to PC application
+*/
+#if ( setup_DEV_DEBUG_USB )
+
+    static float gf_usb_debug[9];
+
+    void HIDE_Sensor_SendDataOverUSB(void)
+    {
+        gf_usb_debug[0] = gf_sensor_pressure;
+        HIDE_Debug_USB_InterfaceSend(gf_usb_debug, sizeof(gf_usb_debug)/ sizeof(gf_usb_debug[0]), debug_FLOAT);
+    }
+
+#endif
+
+#if ( setup_DEV_SUM_RECEIVS )
+    /**
+     * \brief   Draw info about receive Counts on the Display
+     * \note    to enable this HIDE function set setup_DEV_SUM_RECEIVS in qc_setup.h
+     */
+    void HIDE_senMesRec_DrawDisplay(void)
+    {
+        EventBits_t x_faultEventBits = xEventGroupGetBits( gx_sensor_EventGroup );
+        const uint8_t drawHight     = 6;
+        const uint8_t xOffset       = 55;
+        u8g_SetFont(&gs_display, u8g_font_04b_03r);     // u8g_font_unifont
+        uint8_t i;
+        uint16_t hight=drawHight+6;
+        const char* p_name;
+        for(i=0;i<event_SENSOR_BIT_COUNT;++i)
+        {
+            p_name=CountEdges_GetName(p_senMesRec_countEdges,i);
+            if(p_name!=0)
+            {
+                u8g_DrawStr(&gs_display, xOffset + 0,  hight,p_name);                       // Name
+                u8g_DrawStr(&gs_display, xOffset + 15+1, hight, u8g_u16toa(CountEdges_Get(p_senMesRec_countEdges,i),3));      // How often fired
+                hight+=drawHight;
+            }
+        }
+
+    }
+
+    /**
+     * \brief   store the name of the receive eventBit into p_receive_coundEdges
+     *
+     */
+    void HIDE_senMesRec_SetEventName(uint32_t ui32_eventBit,const char* pc_name)
+    {
+        CountEdges_SetName(p_senMesRec_countEdges,CountEdges_Bit2Num(ui32_eventBit),pc_name);
+    }
+
+    /**
+     * \brief   increment at ui32_receiveEventBit in p_receive_coundEdges
+     * \param   ui32_receiveEventBit    the receive eventBit (see receiver_task.h)
+     * \note    to enable this HIDE function set setup_DEV_SUM_RECEIVS in qc_setup.h
+     */
+    void HIDE_senMesRec_Increment(uint32_t ui32_receiveEventBit)
+    {
+        CountEdges_Increment(p_senMesRec_countEdges,CountEdges_Bit2Num(ui32_receiveEventBit));
+    }
+
+#endif
+
+/**
+ * \brief   Draw info about Sensor on the Display
  */
 void Sensor_DrawDisplay(void)
 {
+    static const char* p_sign = " ";
+    static const char* m_sign = "-";
     const uint8_t yOffset       = 58;
 
     u8g_SetFont(&gs_display, u8g_font_04b_03r);     // u8g_font_unifont
@@ -160,930 +222,561 @@ void Sensor_DrawDisplay(void)
 
 }
 
-
-// TODO check if it works/test: function to convert sensor axis to quadcopter axis
-
-static void IMUAxis2QCAxis(float* sensor_data){
-
-    sensor_data[X_ACCEL]    =   sensor_data[X_ACCEL];
-    sensor_data[Y_ACCEL]    =   -sensor_data[Y_ACCEL];
-    sensor_data[Z_ACCEL]    =   sensor_data[Z_ACCEL];
-
-    // TODO Important for alining with OPENGL probably must be changed for controller
-    sensor_data[X_GYRO]     =   -sensor_data[X_GYRO];
-    sensor_data[Y_GYRO]     =   sensor_data[Y_GYRO];
-    sensor_data[Z_GYRO]     =   -sensor_data[Z_GYRO];
-
-    float temp = 0.0;
-
-    temp = sensor_data[X_MAGNET]; // save x_mag value for swap
-
-    sensor_data[X_MAGNET]   =   -sensor_data[Y_MAGNET]; // switch x and y axes of the magnetometer to correlate to the accel and gyro axes and inverse it (x axis points to front of quadcopter)
-    sensor_data[Y_MAGNET]   =   temp; // switch x and y axes of the magnetometer to correlate to the accel and gyro axes
-    sensor_data[Z_MAGNET]   =   sensor_data[Z_MAGNET];
-
-
-
-}
-
-static void convertIMUData(float* sensor_data){
-
-    // convert Acc LSB values to a_g multiple of earth acceleration [1g = 9,81m/s^2]
-    // Formula: a_g = (2 * a_lsb * sensitivity) / 2^16
-    sensor_data[X_ACCEL]    =   (2.0 * sensor_data[X_ACCEL] * 2.0) / 65520.0;
-    sensor_data[Y_ACCEL]    =   (2.0 * sensor_data[Y_ACCEL] * 2.0) / 65520.0;
-    sensor_data[Z_ACCEL]    =   (2.0 * sensor_data[Z_ACCEL] * 2.0) / 65520.0;
-
-    // Convert from Gyro LSB values to g_w angular velocity [°/s]
-    // Formula: g_w = (2 * w_lsb * sensitivity) / 2^16
-    sensor_data[X_GYRO]     =   (2.0 * sensor_data[X_GYRO] * 500.0) / 65520.0;
-    sensor_data[Y_GYRO]     =   (2.0 * sensor_data[Y_GYRO] * 500.0) / 65520.0;
-    sensor_data[Z_GYRO]     =   (2.0 * sensor_data[Z_GYRO] * 500.0) / 65520.0;
-
-    // Convert from degree to rad
-    sensor_data[X_GYRO]     =   sensor_data[X_GYRO] * PI / 180.0;
-    sensor_data[Y_GYRO]     =   sensor_data[Y_GYRO] * PI / 180.0;
-    sensor_data[Z_GYRO]     =   sensor_data[Z_GYRO] * PI / 180.0;
-
-
-    // Adjust Magnetometer by sensitivity values from manufacturer
-    // Formula: m_adj = m_raw * (((ASA_[x,y,z] - 128.0) * 0.5) / 128.0 + 1.0);
-    sensor_data[X_MAGNET]   =   sensor_data[X_MAGNET] * (((176.0 - 128.0) * 0.5) / 128.0 + 1.0);
-    sensor_data[Y_MAGNET]   =   sensor_data[Y_MAGNET] * (((178.0 - 128.0) * 0.5) / 128.0 + 1.0);
-    sensor_data[Z_MAGNET]   =   sensor_data[Z_MAGNET] * (((167.0 - 128.0) * 0.5) / 128.0 + 1.0);
-
-    // Convert Mag LSB values to magnetic flux [uT]
-    // Formula: g_w = (2 * w_lsb * sensitivity) / 2^16
-    sensor_data[X_MAGNET]   =   (2.0 * sensor_data[X_MAGNET] * 4900.0) / 65520.0;
-    sensor_data[Y_MAGNET]   =   (2.0 * sensor_data[Y_MAGNET] * 4900.0) / 65520.0;
-    sensor_data[Z_MAGNET]   =   (2.0 * sensor_data[Z_MAGNET] * 4900.0) / 65520.0;
-}
-
-
-// TODO own implementation of Offset always after senAxis2CXAxis
-static void correctIMUOffset(float* sensor_data,uint8_t calibrate){
-
-    // calibrate accelerometer statically for 5 secs
-
-    if (calibrate == 1){
-
-        //calculate Sensor offsets
-        lp_offsets.x[0] = sensor_data[X_ACCEL];
-        lp_offsets.x[1] = sensor_data[Y_ACCEL];
-        lp_offsets.x[2] = sensor_data[Z_ACCEL] - 1.0f;
-
-        lowPassArray(&lp_offsets);
-
-        f_gyro_cal[0] += sensor_data[X_GYRO];
-        f_gyro_cal[1] += sensor_data[Y_GYRO];
-        f_gyro_cal[2] += sensor_data[Z_GYRO];
-
-        f_index++;
-
-    }
-    else{
-
-        // perform offset correction
-        sensor_data[X_ACCEL]    -= lp_offsets.y[0];
-        sensor_data[Y_ACCEL]    -= lp_offsets.y[1];
-        sensor_data[Z_ACCEL]    -= lp_offsets.y[2];
-
-        if(f_index != 0.0){
-        sensor_data[X_GYRO]     -= f_gyro_cal[0] / f_index;
-        sensor_data[Y_GYRO]     -= f_gyro_cal[1] / f_index;
-        sensor_data[Z_GYRO]     -= f_gyro_cal[2] / f_index;
-        }
-
-        // reduce hard and soft iron biases
-        float x_mag_b0 = sensor_data[X_MAGNET] - f_mag_calibration_b[0];
-        float y_mag_b1 = sensor_data[Y_MAGNET] - f_mag_calibration_b[1];
-        float z_mag_b2 = sensor_data[Z_MAGNET] - f_mag_calibration_b[2];
-
-
-        sensor_data[X_MAGNET]   = (x_mag_b0 * f_mag_calibration_A[0]) +
-                                    (y_mag_b1 * f_mag_calibration_A[3]) +
-                                        (z_mag_b2 * f_mag_calibration_A[6]);
-        sensor_data[Y_MAGNET]   = (x_mag_b0 * f_mag_calibration_A[1]) +
-                                    (y_mag_b1 * f_mag_calibration_A[4]) +
-                                        (z_mag_b2 * f_mag_calibration_A[7]);
-        sensor_data[Z_MAGNET]   = (x_mag_b0 * f_mag_calibration_A[3]) +
-                                    (y_mag_b1 * f_mag_calibration_A[5]) +
-                                        (z_mag_b2 * f_mag_calibration_A[8]);
-
-    }
-}
-
-
-/* ------------------------------------------------------------ */
-/*				Select the Mode									*/
-/* ------------------------------------------------------------ */
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                      Select Mode                                                   */
+/* ---------------------------------------------------------------------------------------------------*/
 
 #if   ( setup_SENSOR_I2C == (setup_SENSOR&setup_MASK_OPT1) ) || DOXYGEN
 
-	/* ------------------------------------------------------------ */
-	/*				Include File Definitions						*/
-	/* ------------------------------------------------------------ */
-
-	#include "mpu925x_registers.h"
-    #include "ms5611_register.h"
-	#include "driverlib/i2c.h"
-	#include <busy_delay.h>
-
-	/* ------------------------------------------------------------ */
-	/*				Local Defines									*/
-	/* ------------------------------------------------------------ */
-
-	#define MAGNET_INIT 						(1)
-    #define MAGNET_READ_SENSITIVITY_VALUES      (1)
-    #define MAGNET_SELTEST_ON                   (1)
-
-    #define BARO_INIT                           (1)
-
-	#define I2CMPU_ADRESS 						MPU_SLAVE_ADDR_1
-	#define ENABLE_BUSY_WAITING_READ			(0)					// for measurement purpose
-
-	//
-	// define the desired peripheral setup (see peripheral_setup.h)
-	//
-	#if ( periph_SENSOR_INT == INT_I2C2 )
-		#define SYSCTL_PERIPH_I2C			SYSCTL_PERIPH_I2C2
-		#define I2C_PERIPH_BASE				I2C2_BASE
-		#define SYSCTL_PERIPH_PORT			SYSCTL_PERIPH_GPIOE
-		#define PORT_BASE					GPIO_PORTE_BASE
-		#define I2C_SCL						GPIO_PE4_I2C2SCL
-		#define SCL_PIN						GPIO_PIN_4
-		#define I2C_SDA						GPIO_PE5_I2C2SDA
-		#define SDA_PIN						GPIO_PIN_5
-	#elif ( periph_SENSOR_INT == INT_I2C1 )
-		#define SYSCTL_PERIPH_I2C			SYSCTL_PERIPH_I2C1
-		#define I2C_PERIPH_BASE				I2C1_BASE
-		#define SYSCTL_PERIPH_PORT			SYSCTL_PERIPH_GPIOA
-		#define PORT_BASE					GPIO_PORTA_BASE
-		#define I2C_SCL						GPIO_PA6_I2C1SCL
-		#define SCL_PIN						GPIO_PIN_6
-		#define I2C_SDA						GPIO_PA7_I2C1SDA
-		#define SDA_PIN						GPIO_PIN_7
-	#else
-		#error	ERROR implement the defines above here
-	#endif
-
-	/* ------------------------------------------------------------ */
-	/*				Local Type Definitions							*/
-	/* ------------------------------------------------------------ */
-
-	enum sensorReadState_e
-	{
-		READY,			// Sensor is not busy
-		READ_ACCEL,		// read accel  and next state will be READ_GYRO
-		READ_GYRO,		// read gyro   and next state will be READ_MAGNET
-		READ_MAGNET,		// read magnet and next state will be READY or READ_BARO
-		READ_BARO       // read baro next state will be READY
-	};
-
-	typedef struct rawData_s {
-	   int16_t x_accel;
-	   int16_t y_accel;
-	   int16_t z_accel;
-	   int16_t x_gyro;
-	   int16_t y_gyro;
-	   int16_t z_gyro;
-	   int16_t x_magnet;
-	   int16_t y_magnet;
-	   int16_t z_magnet;
-	   uint32_t p_baro;
-	   uint32_t t_baro;
-	} rawData_s ;
-
-	typedef struct baroData_s {
-
-	   float f_temp;
-	   float f_pressure;
-
-	} baroData_s;
-
-	/* ------------------------------------------------------------ */
-	/*				Forward Declarations							*/
-	/* ------------------------------------------------------------ */
-
-	static void SensorCalibrate(void);
-	static void correctIMUOffset(float* sensor_data,uint8_t calibrate);
-	static void IMUAxis2QCAxis(float* sensor_data);
-	static void convertIMUData(float* sensor_data);
-	static void I2cBurstRead(uint8_t ui8_i2cAdress, uint8_t registerAdress, uint8_t *data_array, uint8_t data_length);
-    static void I2cBurstReadBlocking(enum sensorReadState_e e_startState,uint8_t ui8_i2cAdress, uint8_t registerAdress, uint8_t *data_array, uint8_t data_length);
-	static void I2CReadFinishCallback(void *pvData, uint_fast8_t ui8_status);
-	static void I2CWriteFinishCallback(void *pvData, uint_fast8_t ui8_status);
-	static void i2cMpuWrite(uint8_t ui8_i2cAdress, uint8_t registerAdress, uint8_t data);
-
-	// TODO test baro
-	static void i2cBaroWrite(uint8_t ui8_i2cAdress, uint8_t command);
-	static baroData_s calculateBaroData(uint32_t t_baro, uint32_t p_baro, uint8_t calibrate);
-	static float calculateAltitude(baroData_s baroData, float accel_z, uint8_t calibrate);
-	static void calculateAngularVelocity(float sensor_data[], float angularVelocity[]);
-	/* ------------------------------------------------------------ */
-	/*				Global Variables								*/
-	/* ------------------------------------------------------------ */
-
-	#if(periph_SENSOR_INT==periph_MOTOR_INT)
-		extern tI2CMInstance i2cMastInst_s;				// I2C master instance
-	#else
-		static tI2CMInstance i2cMastInst_s;				// I2C master instance
-	#endif
-
-	/* ------------------------------------------------------------ */
-	/*				Local Variables									*/
-	/* ------------------------------------------------------------ */
-
-	static uint8_t ui8_i2cBufferRead[12];				// message for I2C
-	static uint8_t ui8_i2cBufferWrite[12];
-	static volatile uint8_t ui8_i2cFinishedFlag = 1;
-	static uint8_t ui8_mpuSetUpFlag, ui8_magSetupFlag, ui8_baroSetupFlag;
-	static enum sensorReadState_e e_sensorReadState=READY;
-
-	// Counter variables for Barometer (MS5611) loop
-	static uint8_t ui8_i2cPressCounter = 0;
-	static uint8_t ui8_i2cTempCounter = 0;
-
-	// variables for temp from barometer
-	static uint32_t ui32_tempRotMem[5];
-	static uint8_t ui8_rotMemCounter;
-	static uint32_t ui32_tempSum;
-
-    // variables for pressure from barometer
-    static uint32_t ui32_pressRotMem[20];
-    static uint8_t ui8_pressMemCounter;
-    static uint32_t ui32_pressSum;
-    static float f_pressureBase = 97500; // Set to a typical value for around 300m to get faster filter convergence
-
-    //flag new pressure measurement is there
-    static uint8_t ui8_newPressValue = 0;
-
-    static float f_pressureReference = 101325.0; // pressure at sea level gets changed in calibrate to local pressure on ground
-
-	static rawData_s s_rawData;
-	static baroData_s s_baroData;
+    /* -----------------------------------------------------------------------------------------------*/
+    /*                                     Include File Definitions i2c Mode                          */
+    /* -----------------------------------------------------------------------------------------------*/
 
 
-	static uint8_t ui8_i2cError=0;
-	static workload_handle_p p_workHandle;
+    //  Hardware Specific
+    #include "inc/hw_memmap.h"
+    #include "inc/hw_ints.h"
+    #include "driverlib/sysctl.h"
+    #include "driverlib/pin_map.h"
+    #include "driverlib/gpio.h"
+    #include "driverlib/rom.h"
 
-	#if	ENABLE_BUSY_WAITING_READ
-		static uint8_t ui8_readFlag=0;
-	#endif
+    // i2c sensorlib
+    #include "sensorlib/i2cm_drv.h"
 
-	/* ------------------------------------------------------------ */
-	/*				Procedure Definitions							*/
-	/* ------------------------------------------------------------ */
+    // sensor register files
+    #include "mpu9265_registers.h"
+    #include "ak8963_registers.h"
+    #include "ms5611_registers.h"
 
-	/**
-	 * \brief	ISR for I2C
-	 *
-	 * 			Give the interrupt handle to the I2C Master instance
-	 */
-	void Sensor_I2CIntHandler(void) // dieser wird für master und slave verwendet?
-	{
-		I2CMIntHandler(&i2cMastInst_s);
-	}
-
-	/**
-	 * \brief	I2C Callback funkction
-	 *
-	 * 			when I2C read transactions have completed, this funktion is called
-	 *			in the context of the I2C master interrupthandler
-	 * \param 	pvData		not used
-	 * \param	ui8_status	status to find error in I2C transmission
-	 */
-	static void I2CReadFinishCallback(void *pvData, uint_fast8_t ui8_status)
-	{
-		// is there  an error in I2C transmission?
-		if(ui8_status != I2CM_STATUS_SUCCESS)
-			ui8_i2cError=true;
-		else
-			ui8_i2cError=false;
+    // sensor lib files
+    #include "sensor_mpu9265.h"
 
 
-		// check if all sensors are initialized
-		if(ui8_mpuSetUpFlag == 1 && ui8_magSetupFlag == 1 && ui8_baroSetupFlag == 1)
-		{
-            switch(e_sensorReadState)
-            {
-                case READY:		// this should never happen!
-                {
-                    while(1);
-                }
-                case READ_ACCEL:
-                {
-                    s_rawData.x_accel = (ui8_i2cBufferRead[0]<<8) + ui8_i2cBufferRead[1];
-                    s_rawData.y_accel = (ui8_i2cBufferRead[2]<<8) + ui8_i2cBufferRead[3];
-                    s_rawData.z_accel = (ui8_i2cBufferRead[4]<<8) + ui8_i2cBufferRead[5];
-                    e_sensorReadState=READ_GYRO;
-                    I2cBurstRead(I2CMPU_ADRESS,GYRO_XOUT_H, ui8_i2cBufferRead, 6);
-                    break;
-                }
-                case READ_GYRO:
-                {
-                    s_rawData.x_gyro = (ui8_i2cBufferRead[0]<<8) + ui8_i2cBufferRead[1];
-                    s_rawData.y_gyro = (ui8_i2cBufferRead[2]<<8) + ui8_i2cBufferRead[3];
-                    s_rawData.z_gyro = (ui8_i2cBufferRead[4]<<8) + ui8_i2cBufferRead[5];
-                    e_sensorReadState=READ_MAGNET;
-                    I2cBurstRead(MAGNET_ADRESS,MAGNET_HXL, ui8_i2cBufferRead, 7);
-                    break;
-                }
-                case READ_MAGNET:
-                {
-                    s_rawData.x_magnet = (ui8_i2cBufferRead[1]<<8) + ui8_i2cBufferRead[0];
-                    s_rawData.y_magnet = (ui8_i2cBufferRead[3]<<8) + ui8_i2cBufferRead[2];
-                    s_rawData.z_magnet = (ui8_i2cBufferRead[5]<<8) + ui8_i2cBufferRead[4];
-
-                    if(ui8_i2cPressCounter == 5){
-
-                        ui8_i2cPressCounter = 0;
-
-                        // TODO can be used without if
-                        if(ui8_i2cTempCounter == 0)
-                        {
-                            // read temperature value in OSC = 4096 (24 bit)
-                            e_sensorReadState=READ_BARO;
-                            I2cBurstRead(BARO_ADDRESS, BARO_ADC_READ_COMMAND, ui8_i2cBufferRead, 3);
-
-                        }
-                        else
-                        {
-                            // read pressure value in OSC = 4096 (24 bit)
-                            e_sensorReadState=READ_BARO;
-                            I2cBurstRead(BARO_ADDRESS, BARO_ADC_READ_COMMAND, ui8_i2cBufferRead, 3);
-                        }
-
-                        // increase the temperature counter with each measurement
-                        ui8_i2cTempCounter++;
-
-                    }
-                    else
-                    {
-                        e_sensorReadState=READY;
-
-                        // increase pressure counter so that 10ms elapse between requiring and reading the values
-                        ui8_i2cPressCounter++;
-
-                        HIDE_Workload_EstimateStop(p_workHandle);
-
-                        #if	ENABLE_BUSY_WAITING_READ
-                            ui8_readFlag=0;
-                        #endif
-                        // fire eventBit to notify Sensor Read has finished
-                        BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-                        if(pdFAIL==xEventGroupSetBitsFromISR(gx_receiver_eventGroup,receiver_SENSOR_DATA, &xHigherPriorityTaskWoken))
-                            while(1);// you will come here, when configTIMER_QUEUE_LENGTH is full
-                        else
-                            portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
-                    }
 
 
-                    break;
 
-                }
-                case READ_BARO:
-                {
-                    // save barometer values into variables
-                    if(ui8_i2cTempCounter == 1)
-                    {
-                        // Read temp value in rotating memory and calculate average of the last 5 measurements to help against temperature spikes
-                        ui32_tempSum -= ui32_tempRotMem[ui8_rotMemCounter];
-                        ui32_tempRotMem[ui8_rotMemCounter] = ui8_i2cBufferRead[0] << 16 | ui8_i2cBufferRead[1] << 8 | ui8_i2cBufferRead[2];
-                        ui32_tempSum += ui32_tempRotMem[ui8_rotMemCounter];
-                        ui8_rotMemCounter++;
+    /*------------------------------------------------------------------------------------------------*/
+    /*                                     Local defines i2c Mode                                     */
+    /* -----------------------------------------------------------------------------------------------*/
 
-                        if(ui8_rotMemCounter == 5)
-                        {
-                            ui8_rotMemCounter = 0;
-                        }
+    // define if barometer and lidar should be enabled
+    #define BARO_INIT                           ( 0 )
+    #define LIDAR_INIT                          ( 0 )
 
-                        if(ui32_tempRotMem[4] != 0 && ui32_pressRotMem[19] != 0)
-                        {
-                            s_rawData.t_baro = ui32_tempSum / 5;
-                        }
-                    }
-                    else
-                    {
-                        // Read pressure value in rotating memory and calculate average of the last 20 measurements to smoothen pressure readings
-                        ui32_pressSum -= ui32_pressRotMem[ui8_pressMemCounter];
-                        ui32_pressRotMem[ui8_pressMemCounter] = ui8_i2cBufferRead[0] << 16 | ui8_i2cBufferRead[1] << 8 | ui8_i2cBufferRead[2];
-                        ui32_pressSum += ui32_pressRotMem[ui8_pressMemCounter];
-                        ui8_pressMemCounter++;
+    // define i2c addresses of sensors
+    #define I2C_MPU_ADRESS                      MPU9265_ADDRESS
+    #define I2C_AK_ADDRESS                      AK8963_ADDRESS
+    #define I2C_MS_ADDRESS                      MS5611_ADDRESS
+    #define I2C_LI_ADDRESS                      0 // TODO change after implementation
 
-                        if(ui8_pressMemCounter == 20)
-                        {
-                            ui8_pressMemCounter = 0;
-                        }
+    // define the desired peripheral setup (see peripheral_setup.h)
+    #if ( periph_SENSOR_INT == INT_I2C2 )
+        #define SYSCTL_PERIPH_I2C           SYSCTL_PERIPH_I2C2
+        #define I2C_PERIPH_BASE             I2C2_BASE
+        #define SYSCTL_PERIPH_PORT          SYSCTL_PERIPH_GPIOE
+        #define PORT_BASE                   GPIO_PORTE_BASE
+        #define I2C_SCL                     GPIO_PE4_I2C2SCL
+        #define SCL_PIN                     GPIO_PIN_4
+        #define I2C_SDA                     GPIO_PE5_I2C2SDA
+        #define SDA_PIN                     GPIO_PIN_5
+    #elif ( periph_SENSOR_INT == INT_I2C1 )
+        #define I2C_SYSCTL_PERIPH           SYSCTL_PERIPH_I2C1
+        #define I2C_PERIPH_BASE             I2C1_BASE
+        #define I2C_SYSCTL_PERIPH_PORT      SYSCTL_PERIPH_GPIOA
+        #define I2C_PORT_BASE               GPIO_PORTA_BASE
+        #define I2C_SCL                     GPIO_PA6_I2C1SCL
+        #define I2C_SCL_PIN                 GPIO_PIN_6
+        #define I2C_SDA                     GPIO_PA7_I2C1SDA
+        #define I2C_SDA_PIN                 GPIO_PIN_7
+    #else
+        #error  ERROR implement the defines above here
+    #endif
 
-                        if(ui32_pressRotMem[19] != 0 && ui32_tempRotMem[4] != 0 )
-                        {
-                            s_rawData.p_baro = ui32_pressSum / 20;
-                            ui8_newPressValue = 1;
-                        }
-                    }
+    /*------------------------------------------------------------------------------------------------*/
+    /*                                     Local Type Definitions i2c Mode                            */
+    /* -----------------------------------------------------------------------------------------------*/
 
-                    if(ui8_i2cTempCounter == 20)
-                    {
-                       // set temp counter to zero and require temp value
-                       ui8_i2cTempCounter = 0;
-                       i2cBaroWrite(BARO_ADDRESS, BARO_CONVER_TEMP_4096);
-                    }
-                    else
-                    {   // require pressure value
-                       i2cBaroWrite(BARO_ADDRESS, BARO_CONVER_PRESS_4096);
-                    }
+    /* ------------------------------------------------------------------------------------------------*/
+    /*                                      Forward Declarations i2c Mode                              */
+    /* ------------------------------------------------------------------------------------------------*/
 
-                    // increase pressure counter so that 10ms elapse between requiring and reading the values
-                    ui8_i2cPressCounter++;
+    static void SensorCalibrate(void);
+    static void MPUrawData2Float(float* pf_sensorData);
+    static void MPUAxis2QCAxis(float* pf_sensorData);
+    static void convertMPUData(float* pf_sensorData);
+    static void correctMPUOffset(float* pf_sensorData, uint8_t calibrate);
+    static void calculateAngularVelocity(float *pf_sensorData, float *angularVelocity);
 
-                    e_sensorReadState=READY;
+    void Sensor_MPU9265Callback(void *pvCallbackData, uint_fast8_t ui8Status);
 
-                    HIDE_Workload_EstimateStop(p_workHandle);
+    // TODO baro functions enable later
+    //static baroData_s calculateBaroData(uint32_t t_baro, uint32_t p_baro, uint8_t calibrate);
+    //static float calculateAltitude(baroData_s baroData, float accel_z, uint8_t calibrate);
 
-                    #if ENABLE_BUSY_WAITING_READ
-                        ui8_readFlag=0;
-                    #endif
-                    // fire eventBit to notify Sensor Read has finished
-                    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-                    if(pdFAIL==xEventGroupSetBitsFromISR(gx_receiver_eventGroup,receiver_SENSOR_DATA, &xHigherPriorityTaskWoken))
-                        while(1);// you will come here, when configTIMER_QUEUE_LENGTH is full
-                    else
-                        portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
-                    break;
 
-                }
+    /* ---------------------------------------------------------------------------------------------------*/
+    /*                                      Global Variables i2c Mode                                      */
+    /* ---------------------------------------------------------------------------------------------------*/
+
+    #if(periph_SENSOR_INT==periph_MOTOR_INT)
+        extern tI2CMInstance i2cMastInst_s;             // I2C master instance
+    #else
+        static tI2CMInstance i2cMastInst_s;             // I2C master instance
+    #endif
+
+    /* ---------------------------------------------------------------------------------------------------*/
+    /*                                      Local Variables i2c Mode                                      */
+    /* ---------------------------------------------------------------------------------------------------*/
+
+    // varibales for sensor functions
+    MPU9265_s s_MPU9265Inst;
+    MPU9265_AK8963_rawData_s s_MPU9265_AK8963_rawData;
+
+
+
+
+    // struct for low pass filtering of acc data
+    struct lp_a_struct lp_offsets = {
+            .alpha = LP_FREQ2ALPHA(0.3f, dt)
+    };
+    // variables for calibrating gyro
+    static float f_gyro_cal[3] = { 0.0, 0.0, 0.0};
+    static float f_index = 0;
+    // Magnetometer calibration data
+    static const float f_mag_calibration_b[3] = { -37.8932,   -3.4380,  -66.0203};
+    static const float f_mag_calibration_A[9] = { 1.0296,         0.0,         0.0,
+                                                 0.0,    0.9850,         0.0,
+                                                 0.0,         0.0,    0.9861};
+
+    // variable for barometer calibration values
+    //static uint16_t ui16_baro_calibration[6];
+
+    // setup flags
+    static uint8_t ui8_mpuInitFlag = 0;
+
+    // flags for i2c transfer
+    static volatile uint8_t ui8_i2cFinishedFlag = 0;
+    static volatile uint8_t ui8_i2cErrorFlag = 0;
+    static volatile uint8_t ui8_i2cMPU9265DataReadFlag = 0;
+
+//  TODO check which variables are needed for barometer
+//    // Counter variables for Barometer (MS5611) loop
+//    static uint8_t ui8_i2cPressCounter = 0;
+//    static uint8_t ui8_i2cTempCounter = 0;
+//
+//    // variables for temp from barometer
+//    static uint32_t ui32_tempRotMem[5];
+//    static uint8_t ui8_rotMemCounter;
+//    static uint32_t ui32_tempSum;
+//
+//    // variables for pressure from barometer
+//    static uint32_t ui32_pressRotMem[20];
+//    static uint8_t ui8_pressMemCounter;
+//    static uint32_t ui32_pressSum;
+//    static float f_pressureBase = 97500; // Set to a typical value for around 300m to get faster filter convergence
+//
+//    //flag new pressure measurement is there
+//    static uint8_t ui8_newPressValue = 0;
+//
+//    static float f_pressureReference = 101325.0; // pressure at sea level gets changed in calibrate to local pressure on ground
+//
+//    static rawData_s s_rawData;
+//    static baroData_s s_baroData;
+
+    /* -----------------------------------------------------------------------------------------------*/
+    /*                                      Procedure Definitions i2c mode                                    */
+    /* -----------------------------------------------------------------------------------------------*/
+
+    /**
+     * \brief   Convert raw int16 values from MPU to float values
+     *
+     */
+    static void MPUrawData2Float(float* pf_sensorData){
+
+        pf_sensorData[X_ACC] = (float) s_MPU9265_AK8963_rawData.i16_accX;
+        pf_sensorData[Y_ACC] = (float) s_MPU9265_AK8963_rawData.i16_accY;
+        pf_sensorData[Z_ACC] = (float) s_MPU9265_AK8963_rawData.i16_accZ;
+
+        pf_sensorData[X_GYRO] = (float) s_MPU9265_AK8963_rawData.i16_gyroX;
+        pf_sensorData[Y_GYRO] = (float) s_MPU9265_AK8963_rawData.i16_gyroY;
+        pf_sensorData[Z_GYRO] = (float) s_MPU9265_AK8963_rawData.i16_gyroZ;
+
+        pf_sensorData[X_MAG] = (float) s_MPU9265_AK8963_rawData.i16_magX;
+        pf_sensorData[Y_MAG] = (float) s_MPU9265_AK8963_rawData.i16_magY;
+        pf_sensorData[Z_MAG] = (float) s_MPU9265_AK8963_rawData.i16_magZ;
+
+    }
+    /**
+     * \brief   Matches the MPU axes to the QC axes
+     *
+     */
+    static void MPUAxis2QCAxis(float* pf_sensorData){
+
+        pf_sensorData[X_ACC]    =   pf_sensorData[X_ACC];
+        pf_sensorData[Y_ACC]    =   -pf_sensorData[Y_ACC];
+        pf_sensorData[Z_ACC]    =   pf_sensorData[Z_ACC];
+
+        pf_sensorData[X_GYRO]     =   -pf_sensorData[X_GYRO];
+        pf_sensorData[Y_GYRO]     =   pf_sensorData[Y_GYRO];
+        pf_sensorData[Z_GYRO]     =   -pf_sensorData[Z_GYRO];
+
+        float temp = 0.0;
+
+        temp = pf_sensorData[X_MAG];                      // save x_mag value for swap
+
+        pf_sensorData[X_MAG]   =   -pf_sensorData[Y_MAG];   // switch x and y axes of the magnetometer to correlate to the accel and gyro axes and inverse it (x axis points to front of quadcopter)
+        pf_sensorData[Y_MAG]   =   temp;                  // switch x and y axes of the magnetometer to correlate to the accel and gyro axes
+        pf_sensorData[Z_MAG]   =   pf_sensorData[Z_MAG];
+
+    }
+
+    /**
+     * \brief   Convert raw MPU data to SI units
+     *
+     */
+    static void convertMPUData(float* pf_sensorData){
+
+        // convert Acc LSB values to a_g multiple of earth acceleration [1g = 9,81m/s^2]
+        // Formula: a_g = (2 * a_lsb * sensitivity) / 2^16
+        pf_sensorData[X_ACC]    =   (2.0 * pf_sensorData[X_ACC] * 2.0) / 65520.0;
+        pf_sensorData[Y_ACC]    =   (2.0 * pf_sensorData[Y_ACC] * 2.0) / 65520.0;
+        pf_sensorData[Z_ACC]    =   (2.0 * pf_sensorData[Z_ACC] * 2.0) / 65520.0;
+
+        // Convert from Gyro LSB values to g_w angular velocity [°/s]
+        // Formula: g_w = (2 * w_lsb * sensitivity) / 2^16
+        pf_sensorData[X_GYRO]     =   (2.0 * pf_sensorData[X_GYRO] * 500.0) / 65520.0;
+        pf_sensorData[Y_GYRO]     =   (2.0 * pf_sensorData[Y_GYRO] * 500.0) / 65520.0;
+        pf_sensorData[Z_GYRO]     =   (2.0 * pf_sensorData[Z_GYRO] * 500.0) / 65520.0;
+
+        // Convert from degree to rad
+        pf_sensorData[X_GYRO]     =   pf_sensorData[X_GYRO] * math_PI / 180.0;
+        pf_sensorData[Y_GYRO]     =   pf_sensorData[Y_GYRO] * math_PI / 180.0;
+        pf_sensorData[Z_GYRO]     =   pf_sensorData[Z_GYRO] * math_PI / 180.0;
+
+
+        // Adjust Magnetometer by sensitivity values from manufacturer
+        // Formula: m_adj = m_raw * (((ASA_[x,y,z] - 128.0) * 0.5) / 128.0 + 1.0);
+        pf_sensorData[X_MAG]   =   pf_sensorData[X_MAG] * (((176.0 - 128.0) * 0.5) / 128.0 + 1.0);
+        pf_sensorData[Y_MAG]   =   pf_sensorData[Y_MAG] * (((178.0 - 128.0) * 0.5) / 128.0 + 1.0);
+        pf_sensorData[Z_MAG]   =   pf_sensorData[Z_MAG] * (((167.0 - 128.0) * 0.5) / 128.0 + 1.0);
+
+        // Convert Mag LSB values to magnetic flux [uT]
+        // Formula: g_w = (2 * w_lsb * sensitivity) / 2^16
+        pf_sensorData[X_MAG]   =   (2.0 * pf_sensorData[X_MAG] * 4900.0) / 65520.0;
+        pf_sensorData[Y_MAG]   =   (2.0 * pf_sensorData[Y_MAG] * 4900.0) / 65520.0;
+        pf_sensorData[Z_MAG]   =   (2.0 * pf_sensorData[Z_MAG] * 4900.0) / 65520.0;
+    }
+
+
+
+    /**
+     * \brief   Correct the MPU offsets after calibration phase
+     *
+     */
+    static void correctMPUOffset(float* pf_sensorData,uint8_t calibrate){
+
+        // calibrate accelerometer statically for 5 secs
+
+        if (calibrate == 1){
+
+            //calculate Sensor offsets
+            lp_offsets.x[0] = pf_sensorData[X_ACC];
+            lp_offsets.x[1] = pf_sensorData[Y_ACC];
+            lp_offsets.x[2] = pf_sensorData[Z_ACC] - 1.0f;
+
+            lowPassArray(&lp_offsets);
+
+            f_gyro_cal[0] += pf_sensorData[X_GYRO];
+            f_gyro_cal[1] += pf_sensorData[Y_GYRO];
+            f_gyro_cal[2] += pf_sensorData[Z_GYRO];
+
+            f_index++;
+
+        }
+        else{
+
+            // perform offset correction
+            pf_sensorData[X_ACC]    -= lp_offsets.y[0];
+            pf_sensorData[Y_ACC]    -= lp_offsets.y[1];
+            pf_sensorData[Z_ACC]    -= lp_offsets.y[2];
+
+            if(f_index != 0.0){
+            pf_sensorData[X_GYRO]     -= f_gyro_cal[0] / f_index;
+            pf_sensorData[Y_GYRO]     -= f_gyro_cal[1] / f_index;
+            pf_sensorData[Z_GYRO]     -= f_gyro_cal[2] / f_index;
             }
-		}
-		else
-		{
-		    // If you get here setup of sensors isn't finished or wasn't succesful
-		}
-	}
 
-	/**
-	 * \brief	I2C Callback funkction
-	 *
-	 * 			when I2C trnsactions have completed, this funktion is called
-	 *			in the context of the I2C master interrupthandler
-	 * \param 	pvData		not used
-	 * \param	ui8_status	status to find error in I2C transmission
-	 */
-	static void I2CWriteFinishCallback(void *pvData, uint_fast8_t ui8_status)
-	{
-		// is there  an error in I2C transmission?
-		if(ui8_status != I2CM_STATUS_SUCCESS)// sometimes this happens, during init in debug mode (unplug and replug usb so that the Sensor loses voltage)
-			xEventGroupSetBits(gx_fault_EventGroup,fault_SENSOR);
-		else
-			xEventGroupClearBits(gx_fault_EventGroup,fault_SENSOR);
-		HIDE_Fault_Increment(fault_SENSOR,ui8_status != I2CM_STATUS_SUCCESS);
+            // reduce hard and soft iron biases
+            float x_mag_b0 = pf_sensorData[X_MAG] - f_mag_calibration_b[0];
+            float y_mag_b1 = pf_sensorData[Y_MAG] - f_mag_calibration_b[1];
+            float z_mag_b2 = pf_sensorData[Z_MAG] - f_mag_calibration_b[2];
 
 
-	}
+            pf_sensorData[X_MAG]   = (x_mag_b0 * f_mag_calibration_A[0]) +
+                                        (y_mag_b1 * f_mag_calibration_A[3]) +
+                                            (z_mag_b2 * f_mag_calibration_A[6]);
+            pf_sensorData[Y_MAG]   = (x_mag_b0 * f_mag_calibration_A[1]) +
+                                        (y_mag_b1 * f_mag_calibration_A[4]) +
+                                            (z_mag_b2 * f_mag_calibration_A[7]);
+            pf_sensorData[Z_MAG]   = (x_mag_b0 * f_mag_calibration_A[3]) +
+                                        (y_mag_b1 * f_mag_calibration_A[5]) +
+                                            (z_mag_b2 * f_mag_calibration_A[8]);
 
-	static void I2cBurstReadBlocking(enum sensorReadState_e e_startState,uint8_t ui8_i2cAdress, uint8_t registerAdress, uint8_t *data_array, uint8_t data_length)
-	{
-		e_sensorReadState=e_startState;
-		#if	ENABLE_BUSY_WAITING_READ
-			ui8_readFlag=1;
-		#endif
-		HIDE_Workload_EstimateStart(p_workHandle);
-		I2cBurstRead(ui8_i2cAdress,registerAdress, data_array, data_length);
-		#if	ENABLE_BUSY_WAITING_READ
-			while(ui8_readFlag);
-		#endif
-
-		EventBits_t x_receiverEventBits;
-	    //  Wait for sensor receiver event
-		x_receiverEventBits = xEventGroupWaitBits(gx_receiver_eventGroup,
-				receiver_SENSOR_DATA,
-				pdTRUE,          // clear Bits before returning.
-				pdTRUE,          // wait for all Bits
-				SENSOR_READ_TIMEOUT_MS / portTICK_PERIOD_MS ); // maximum wait time
-		HIDE_Receive_Increment(receiver_SENSOR_DATA);
-
-		// unblock because of timeout, or i2cError?
-		uint8_t ui8_error=(receiver_SENSOR_DATA & x_receiverEventBits == 0) || ui8_i2cError;
-		if( ui8_error )
-			xEventGroupSetBits(gx_fault_EventGroup,fault_SENSOR);
-		else
-			xEventGroupClearBits(gx_fault_EventGroup,fault_SENSOR);
-		HIDE_Fault_Increment(fault_SENSOR,ui8_error);
-	}
-
-	static void I2cBurstRead(uint8_t ui8_i2cAdress, uint8_t registerAdress, uint8_t *data_array, uint8_t data_length)
-	{
-		ui8_i2cBufferWrite[0] = registerAdress;
-		if(I2CMRead(	&i2cMastInst_s, 					// pointer to i2c master instance
-					ui8_i2cAdress,						// address of the I2C device to access
-					ui8_i2cBufferWrite,							// pointer to the data buffer to be written.
-					1,									// the number of bytes to be written
-					data_array,							// pointer to the buffer to be filled with the read data
-					data_length,						// the number of bytes to be read
-					I2CReadFinishCallback, 				// function to be called when the transfer has completed
-					0)==0)									// pointer that is passed to the callback function.
-		{
-		    // TODO change so that quadcopter goes into blind landing because i2c error is not fixable without new start
-		    // No commands can be given to i2c anymore really bad because then motor and sensors are not working anymore
-		    // TODO test just restart I2C master test if it can then work properly again
-		   while(1);
-		}
-	}
-
-	static void i2cMpuWrite(uint8_t ui8_i2cAdress, uint8_t registerAdress, uint8_t data)
-	{
-		vTaskDelay(1);
-		while(I2CMasterBusy(I2C_PERIPH_BASE));
-
-		ui8_i2cBufferWrite[0] = registerAdress;
-		ui8_i2cBufferWrite[1] = data;
-		I2CMWrite(	&i2cMastInst_s, 					// pointer to i2c master instance
-					ui8_i2cAdress, 						// I2C adress
-					ui8_i2cBufferWrite, 							// I2C message
-					2, 									// message length
-					I2CWriteFinishCallback, 			// callback funktion (when message was sent)
-					0);									// callback data
-		while(I2CMasterBusy(I2C_PERIPH_BASE));
-	}
-
-
-	static void i2cGetMpuData(float sensor_data[]){
-
-		// Read All Sensor Data
-		I2cBurstReadBlocking(READ_ACCEL,I2CMPU_ADRESS,ACCEL_XOUT_H, ui8_i2cBufferRead, 6);
-
-		sensor_data[X_ACCEL]	= (float)s_rawData.x_accel;
-		sensor_data[Y_ACCEL]	= (float)s_rawData.y_accel;
-		sensor_data[Z_ACCEL]	= (float)s_rawData.z_accel;
-		sensor_data[X_GYRO]		= (float)s_rawData.x_gyro;
-		sensor_data[Y_GYRO]		= (float)s_rawData.y_gyro;
-		sensor_data[Z_GYRO]		= (float)s_rawData.z_gyro;
-
-		sensor_data[X_MAGNET]   = (float)s_rawData.x_magnet;
-		sensor_data[Y_MAGNET]   = (float)s_rawData.y_magnet;
-		sensor_data[Z_MAGNET]   = (float)s_rawData.z_magnet;
-
-		// barometer data is not copied here because you need the raw_data in int format to calculate pressure and temperature
-
-	}
-
-	// TODO try to calcultae velocity from angle has to be possible to be smoover
-	static void calculateAngularVelocity(float angles[], float angularVelocity[3]){
-
-	    float w_angles[3];
-	    static float anglesOld[3];
-
-	    uint8_t i;
-	    for(i=0; i<3; i++)
-	    {
-	        w_angles[i] = (angles[i] - anglesOld[i]) / dt;
-	        // TODO check if usable limits
-	        math_LIMIT(w_angles[i], -2.0, 2.0);
-	        gf_sensor_angularVelocity[i] = w_angles[i];
-	        anglesOld[i] = angles[i];
-	    }
-
-
-
-
-
-
-	}
-
-    // TODO test baro
-    static void i2cBaroWrite(uint8_t ui8_i2cAdress, uint8_t command){
-
-        ui8_i2cBufferWrite[0] = command;
-        while(I2CMasterBusy(I2C_PERIPH_BASE));
-        if(I2CMWrite(  &i2cMastInst_s,                     // pointer to i2c master instance
-                    ui8_i2cAdress,                      // I2C adress
-                    ui8_i2cBufferWrite,                          // I2C message
-                    1,                                  // message length
-                    I2CWriteFinishCallback,             // callback funktion (when message was sent)
-                    0) == 0)
-        {
-            // TODO implement blind landing sequence if program gets here i2c doesn't work correctly anymore
-            while(1);
         }
-        while(I2CMasterBusy(I2C_PERIPH_BASE));
+    }
+
+    /**
+    * \brief   calculate angulat velocity from tait-bryan angles
+    */
+    static void calculateAngularVelocity(float *angles, float *angularVelocity){
+
+        float w_angles[3];
+        static float anglesOld[3];
+
+        uint8_t i;
+        for(i=0; i<3; i++)
+        {
+            w_angles[i] = (angles[i] - anglesOld[i]) / dt;
+            // TODO check if usable limits
+            math_LIMIT(w_angles[i], -2.0, 2.0);
+            gf_sensor_angularVelocity[i] = w_angles[i];
+            anglesOld[i] = angles[i];
+        }
 
     }
 
-    // TODO test baro
-    static baroData_s calculateBaroData(uint32_t t_baro, uint32_t p_baro, uint8_t calibrate){
-
-        // help variables to calculate smoth pressure values (look at datasheet of MS5611)
-        int64_t OFF, OFF_C2, SENS, SENS_C1;
-        int32_t dT, TEMP, P;
-        float f_pressureDiff;
-        baroData_s baroData;
-
-        //Calculate pressure as explained in the datasheet of the MS-5611.
-        dT = (int32_t) (t_baro - ui16_baro_calibration[4] * 256);
-        //Calculate Temperature in °C [2000 = 20,00C°] not necessary for application
-        TEMP = (int32_t) (2000 + dT * ui16_baro_calibration[5] / 8388608);
-        baroData.f_temp = (float) TEMP;
-
-        OFF_C2 = (int64_t) ui16_baro_calibration[1] * 65536;
-        SENS_C1 =(int64_t) ui16_baro_calibration[0] * 32768;
-
-        OFF = OFF_C2 + ((int64_t)dT * (int64_t)ui16_baro_calibration[3]) / 128;
-        SENS = SENS_C1 + ((int64_t)dT * (int64_t)ui16_baro_calibration[2]) / 256;
-        P = (int32_t)(((p_baro * SENS) / 2097152 - OFF) / 32768);
-
-        baroData.f_pressure = (float) P;
-
-
-        // Use a complementary filter to get a smoother pressure curve
-        f_pressureBase = f_pressureBase * 0.985 + baroData.f_pressure * 0.015;
-
-        f_pressureDiff = f_pressureBase - baroData.f_pressure;
-        // To still guarantee fast behaviour if the difference is to big and secure for malfunctions
-        f_pressureDiff = math_LIMIT(f_pressureDiff, -8.0, 8.0);
-        if(f_pressureDiff > 1.0 || f_pressureDiff < -1.0)
-        {
-            f_pressureBase -= f_pressureDiff / 6.0;
-        }
-        baroData.f_pressure = f_pressureBase;
-
-        return baroData;
+    /**
+     * \brief   ISR for I2C
+     *          Give the interrupt handle to the I2C Master instance
+     */
+    void Sensor_I2CIntHandler(void)
+    {
+        I2CMIntHandler(&i2cMastInst_s);
     }
 
+    /**
+    * \brief   MPU9265 sensor callback function only set flag computation in other functions
+    *
+    */
+    void Sensor_MPU9265Callback(void *pvCallbackData, uint_fast8_t ui8_i2cState){
 
-    static float calculateAltitude(baroData_s baroData, float accel_z, uint8_t calibrate){
+        // check if i2c was a success else save error
+        if(ui8_i2cState == I2CM_STATUS_SUCCESS){
 
-        float pressureClean, tempClean;
-        float altitude;
+            ui8_i2cErrorFlag = 0;
 
-        // clean noise/values outside the resolution of the sensor from the pressure value
-        //modff(baroData.f_pressure, &pressureClean); // stores int part of pressure in pressureClean
-        //pressureClean = baroData.f_pressure;
-        baroData.f_temp /= 100.0;
+            if(ui8_mpuInitFlag){
+                HIDE_Workload_EstimateStop(p_workHandle);
+            }
 
-        //modff(baroData.f_temp, &tempClean);
-
-
-        if(calibrate == 1)
-        {
-            f_pressureReference = baroData.f_pressure;
+            // fire eventBit to notify Sensor Read has finished
+            BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+            if(pdFAIL==xEventGroupSetBitsFromISR(gx_sensor_EventGroup, event_RECEIVED_pf_sensorData, &xHigherPriorityTaskWoken))
+                while(1);// you will come here, when configTIMER_QUEUE_LENGTH is full
+            else
+                portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
         }
         else
         {
-            altitude = ((powf((f_pressureReference/baroData.f_pressure), (1.0/5.257)) - 1.0)*(baroData.f_temp + 273.15)) / 0.0065;
+            ui8_i2cErrorFlag = 1;
         }
-
-        return altitude;
     }
 
-  	/**
-	 * \brief	Init the peripheral for the sensor driver
-	 */
-	void Sensor_InitPeriph(void)
-	{
-		BusyDelay_Init();
-		ROM_IntPrioritySet(periph_SENSOR_INT,    priority_SENSOR_ISR);		// I2C Sensorbus (MPU9150,BAro)
+    /**
+     * \brief   Init the peripheral for the sensor driver
+     */
+    void Sensor_InitPeriph(void)
+    {
+        BusyDelay_Init();
 
-		// Enable peripherial I2C
-		ROM_SysCtlPeripheralEnable(SYSCTL_PERIPH_I2C);
-		ROM_SysCtlPeripheralEnable(SYSCTL_PERIPH_PORT);
+        gx_sensor_EventGroup = xEventGroupCreate();
 
-		// Set GPIOs as I2C pins.
-		ROM_GPIOPinConfigure(I2C_SCL);
-		ROM_GPIOPinConfigure(I2C_SDA);
+        // Was the event group created successfully?
+        if( gx_sensor_EventGroup == math_NULL )
+                while(1);
 
-		// open drain with pullups
-		ROM_GPIOPinTypeI2C(PORT_BASE, SDA_PIN);
-		ROM_GPIOPinTypeI2CSCL(PORT_BASE, SCL_PIN);
+        ROM_IntPrioritySet(periph_SENSOR_INT, priority_SENSOR_ISR);      // I2C Sensorbus (MPU9265;Baro;LIDAR)
 
-		// Set the Master Clock and choose fast mode (400 kbps)
-		ROM_I2CMasterInitExpClk(I2C_PERIPH_BASE, ROM_SysCtlClockGet(), true);
+        // Enable peripherial I2C
+        ROM_SysCtlPeripheralEnable(I2C_SYSCTL_PERIPH);
+        ROM_SysCtlPeripheralEnable(I2C_SYSCTL_PERIPH_PORT);
 
-		ROM_I2CMasterEnable(I2C_PERIPH_BASE);
+        // Set GPIOs as I2C pins.
+        ROM_GPIOPinConfigure(I2C_SCL);
+        ROM_GPIOPinConfigure(I2C_SDA);
+
+        // open drain with pullups
+        ROM_GPIOPinTypeI2CSCL(I2C_PORT_BASE, I2C_SCL_PIN);
+        ROM_GPIOPinTypeI2C(I2C_PORT_BASE, I2C_SDA_PIN);
 
 
-		// i2c driver unit
-		I2CMInit(	&i2cMastInst_s,
-					I2C_PERIPH_BASE,
-					periph_SENSOR_INT,
-					0xff,
-					0xff,
-					ROM_SysCtlClockGet());
+        // i2c driver unit
+        I2CMInit(   &i2cMastInst_s,
+                    I2C_PERIPH_BASE,
+                    periph_SENSOR_INT,
+                    0xff,
+                    0xff,
+                    ROM_SysCtlClockGet());
 
-		// enable interrupts
-		ROM_IntEnable(i2cMastInst_s.ui8Int);
-		ROM_I2CMasterIntEnableEx(i2cMastInst_s.ui32Base, I2C_MASTER_INT_DATA);
-
-		// set optional eventBits name
-		HIDE_Fault_SetEventName(fault_SENSOR,"Sen");
-		HIDE_Receive_SetEventName(receiver_SENSOR_DATA,"Sen");
+         // set optional eventBits name
+        HIDE_Fault_SetEventName(fault_SENSOR,"Sen");
 
         // workload estimation for I2C
         HIDE_Workload_EstimateCreate(&p_workHandle, "sI2C");
-	}
 
-	/**
-	 * \brief	Init through the peripheral the sensor chip itself
-	 */
-	void Sensor_InitSensor(void)
-	{
-		vTaskDelay( 50 );
-		// do a reset
-		i2cMpuWrite(I2CMPU_ADRESS,PWR_MGMT_1, H_RESET);
-		                                                // TODO why twice check and change
-		i2cMpuWrite(I2CMPU_ADRESS,PWR_MGMT_1, H_RESET);
-		// configure Sensor to use internal 20 MHz clock
-		i2cMpuWrite(I2CMPU_ADRESS,PWR_MGMT_1, INT_20MHZ_CLOCK);
-		// set sample rate divider to Internal_Sample_Rate / (1 + SMPLRT_DIV)
-		i2cMpuWrite(I2CMPU_ADRESS,SMPLRT_DIV, 0x00);
-		// configure accelerometer
-		i2cMpuWrite(I2CMPU_ADRESS,ACCEL_CONFIG, ACCEL_FS_2g);
-		// configure gyroscope
-		i2cMpuWrite(I2CMPU_ADRESS,GYRO_CONFIG, GYRO_FS_500dps);
-		// INT Pin / Bypass Enable Configuration
-		i2cMpuWrite(I2CMPU_ADRESS,INT_PIN_CFG, BYPASS_EN);
-
-		ui8_mpuSetUpFlag = 1;
-
-		// Init Magnetometer
-		#if (MAGNET_INIT == 1)
-
-		    // Read sensitivity values of magnetometer
-            #if (MAGNET_READ_SENSITIVITY_VALUES == 1)
-			// Perform a soft reset
-                i2cMpuWrite(MAGNET_ADRESS, MAGNET_CNTL2, MAGNET_SRST);
-
-                // Read adjustment values in Fuse ROM access mode
-                i2cMpuWrite(MAGNET_ADRESS, MAGNET_CNTL1, MAGNET_FUSE_ROM_MODE | MAGNET_16_BIT_OUTPUT);
-
-                // Read out the sensitivity adjustment values
-                uint8_t ASAX_val[1] = {0};
-                uint8_t ASAY_val[1] = {0};
-                uint8_t ASAZ_val[1] = {0};
-
-                I2cBurstReadBlocking(READ_MAGNET,MAGNET_ADRESS,MAGNET_ASAX, ASAX_val, 1);
-                I2cBurstReadBlocking(READ_MAGNET,MAGNET_ADRESS,MAGNET_ASAY, ASAY_val, 1);
-                I2cBurstReadBlocking(READ_MAGNET,MAGNET_ADRESS,MAGNET_ASAZ, ASAZ_val, 1);
-
-            #endif
-
-            // Self test for magnetometer at start-up
-            #if (MAGNET_SELTEST_ON == 1)
-
-                // Perform a soft reset
-                i2cMpuWrite(MAGNET_ADRESS, MAGNET_CNTL2, MAGNET_SRST);
-
-                i2cMpuWrite(MAGNET_ADRESS,MAGNET_ASTC, MAGNET_SELFTEST_BIT_ON);
-
-                // Magnet self test mode and 16 bit mode
-                i2cMpuWrite(MAGNET_ADRESS,MAGNET_CNTL1, MAGNET_SEFL_TEST_MODE | MAGNET_16_BIT_OUTPUT);
-
-                uint8_t ui8_selftest_val[7];
-
-                I2cBurstReadBlocking(READ_MAGNET,MAGNET_ADRESS,MAGNET_HXL, ui8_selftest_val, 7);
-
-                s_rawData.x_magnet = (ui8_selftest_val[1]<<8) + ui8_selftest_val[0];
-                s_rawData.y_magnet = (ui8_selftest_val[3]<<8) + ui8_selftest_val[2];
-                s_rawData.z_magnet = (ui8_selftest_val[5]<<8) + ui8_selftest_val[4];
-
-                e_sensorReadState=READY;
-
-                i2cMpuWrite(MAGNET_ADRESS,MAGNET_ASTC, MAGNET_SELFTEST_BIT_OFF);
-
-            #endif
-
-        // Perform a soft reset
-        i2cMpuWrite(MAGNET_ADRESS, MAGNET_CNTL2, MAGNET_SRST);
-
-        // Continous mode and 16 bit mode
-        i2cMpuWrite(MAGNET_ADRESS,MAGNET_CNTL1, MAGNET_CONTINUOUS_MODE2 | MAGNET_16_BIT_OUTPUT);
-
-        ui8_magSetupFlag = 1;
-
-		#endif
-
-        // TODO test baro
-        #if (BARO_INIT == 1)
-
-            // perform reset of Barometer
-            i2cBaroWrite(BARO_ADDRESS, BARO_RESET);
-
-            // Delay after Reset before reading prom
-            BusyDelay_Ms(15);
-
-            // read calibration values from PROM 0xA0 -> 0xAE
-            uint8_t i;
-            uint8_t j = 0;
-
-            for(i = 1; i <=6; i++)
+        #if ( setup_DEV_SUM_RECEIVS )
+            HIDE_Display_InsertDrawFun(HIDE_senMesRec_DrawDisplay);
+            p_senMesRec_countEdges = CountEdges_Create(event_SENSOR_BIT_COUNT);
+            if( p_senMesRec_countEdges == math_NULL )
             {
-                I2cBurstReadBlocking(READ_BARO, BARO_ADDRESS, BARO_PROM_READ + i*2, ui8_i2cBufferRead, 2);
-
-                ui8_i2cBufferRead[j] = ui8_i2cBufferRead[0];
-
-                ui16_baro_calibration[i-1] = ui8_i2cBufferRead[j];
-                ui16_baro_calibration[i-1] <<= 8;
-                j++;
-
-                ui8_i2cBufferRead[j] = ui8_i2cBufferRead[1];
-                ui16_baro_calibration[i-1] |= ui8_i2cBufferRead[j];
-                j++;
-
-                e_sensorReadState=READY;
-
+                while(1); // creation didn't work
             }
-
-            // get 100 barometer tempeteratur readings in set-up because barometer needs some time to send correct value
-            for(i=0; i<100; i++)
-            {
-                i2cBaroWrite(BARO_ADDRESS, BARO_CONVER_TEMP_4096);
-                BusyDelay_Ms(10);
-                I2cBurstReadBlocking(READ_BARO, BARO_ADDRESS, BARO_ADC_READ_COMMAND, ui8_i2cBufferRead, 3);
-                BusyDelay_Ms(1);
-                i2cBaroWrite(BARO_ADDRESS, BARO_CONVER_PRESS_4096);
-                BusyDelay_Ms(10);
-                I2cBurstReadBlocking(READ_BARO, BARO_ADDRESS, BARO_ADC_READ_COMMAND, ui8_i2cBufferRead, 3);
-                BusyDelay_Ms(1);
-            }
-
-            i2cBaroWrite(BARO_ADDRESS, BARO_CONVER_TEMP_4096);
-
-            ui8_baroSetupFlag = 1;
+            HIDE_senMesRec_SetEventName(event_RECEIVED_pf_sensorData, "Sen");
         #endif
+    }
 
-		// reset Sensor fault eventBit
-		xEventGroupClearBits(gx_fault_EventGroup,fault_SENSOR);
-	}
+    /**
+     * \brief   Init through the peripheral the sensor chip itself
+     */
+    void Sensor_InitSensor(void)
+    {
 
-	/**
-	 * \brief	collect data to calibrate the sensor
-	 */
-	static void SensorCalibrate(void)
-	{
-		// Read out sensor data and perform formatting
-		float sensor_data[9];
+        xEventGroupClearBits(gx_fault_EventGroup,fault_SENSOR);
+        xEventGroupClearBits(gx_sensor_EventGroup,event_RECEIVED_pf_sensorData);
 
-		// Get MPU data and also barometer raw values and convert and collect correction data it
-		i2cGetMpuData(sensor_data);
-		IMUAxis2QCAxis(sensor_data);
-		convertIMUData(sensor_data);
-        correctIMUOffset(sensor_data, 1);
+        // if returned zero init was not succesfull
+        if(!MPU9265_Init(&s_MPU9265Inst, &i2cMastInst_s, I2C_MPU_ADRESS, Sensor_MPU9265Callback, &s_MPU9265Inst))
+            while(1);
 
-		//For calibration the barometer has to be read a few times so that the right temperature is measured (nothing special just reading)
-		if(ui8_newPressValue == 1)
-		{
-		    ui8_newPressValue = 0;
-		    calculateBaroData(s_rawData.t_baro, s_rawData.p_baro, 1);
-		    calculateAltitude(s_baroData, 0, 1);
-		}
+        EventBits_t x_sensorEventBits;
+        //  Wait for sensor received event
+        x_sensorEventBits = xEventGroupWaitBits(gx_sensor_EventGroup,
+        event_RECEIVED_pf_sensorData,
+        pdTRUE,          // clear Bits before returning.
+        pdTRUE,          // wait for all Bits
+        SENSOR_INIT_TIMEOUT_MS / portTICK_PERIOD_MS ); // maximum wait time
 
-	}
+        // unblock because of timeout, or i2cError?
+        uint8_t ui8_error=(event_RECEIVED_pf_sensorData & x_sensorEventBits == 0) || ui8_i2cErrorFlag != 0;
+        if( ui8_error )
+        {
+           xEventGroupSetBits(gx_fault_EventGroup,fault_SENSOR);
+        }
+        else
+        {
+           xEventGroupClearBits(gx_fault_EventGroup,fault_SENSOR);
+           ui8_mpuInitFlag = 1;
+        }
+        HIDE_Fault_Increment(fault_SENSOR,ui8_error);
 
-	/**
-	 * \brief	read the sonsor and prepare data (sensor fusion).
-	 *
-	 *			fire eventBit fault_SENSOR if there is a fault,
-	 *			else clear the bit.
-	 * \note    Events: EventBit fault_SENSOR will be set or cleared in gx_fault_EventGroup
-	 */
-	void Sensor_ReadAndFusion(void)
-	{
-		// Read out sensor data and perform formatting
-		float sensor_data[9];
-		// TODO test baro
+    }
+
+    /**
+     * \brief   collect data to calibrate the sensor
+     */
+    static void SensorCalibrate(void)
+    {
+        float pf_sensorData[12];
+
+        if(!MPU9265_ReadData(&s_MPU9265Inst, Sensor_MPU9265Callback, &s_MPU9265Inst))
+        {
+            // couln't initiate a read
+        }
 
 
-		// Get MPU data and convert and correct it
-		i2cGetMpuData(sensor_data);
-		IMUAxis2QCAxis(sensor_data);
-		convertIMUData(sensor_data);
-		correctIMUOffset(sensor_data, 0);
+        HIDE_Workload_EstimateStart(p_workHandle);
+        EventBits_t x_sensorEventBits;
+        //  Wait for sensor received event
+        x_sensorEventBits = xEventGroupWaitBits(gx_sensor_EventGroup,
+               event_RECEIVED_pf_sensorData,
+               pdTRUE,          // clear Bits before returning.
+               pdTRUE,          // wait for all Bits
+               SENSOR_READ_TIMEOUT_MS / portTICK_PERIOD_MS ); // maximum wait time
+
+        // unblock because of timeout, or i2cError?
+        uint8_t ui8_error=(event_RECEIVED_pf_sensorData & x_sensorEventBits == 0) || ui8_i2cErrorFlag != 0;
+        if( ui8_error )
+        {
+           xEventGroupSetBits(gx_fault_EventGroup,fault_SENSOR);
+        }
+        else
+        {
+           xEventGroupClearBits(gx_fault_EventGroup,fault_SENSOR);
+           HIDE_senMesRec_Increment(event_RECEIVED_pf_sensorData);
+        }
+        HIDE_Fault_Increment(fault_SENSOR,ui8_error);
+
+        // Get MPU data and convert it
+        MPU9265_AK8963_GetRawData(&s_MPU9265Inst, &s_MPU9265_AK8963_rawData);
+        MPUrawData2Float(pf_sensorData);
+        // Correct MPU data
+        MPUAxis2QCAxis(pf_sensorData);
+        convertMPUData(pf_sensorData);
+        correctMPUOffset(pf_sensorData, 1);
+
+
+
+    }
+    /**
+     * \brief   read the sonsor and prepare data (sensor fusion).
+     *
+     *          fire eventBit fault_SENSOR if there is a fault,
+     *          else clear the bit.
+     * \note    Events: EventBit fault_SENSOR will be set or cleared in gx_fault_EventGroup
+     */
+    void Sensor_ReadAndFusion(void)
+    {
+        // Read out sensor data and perform formatting
+        float pf_sensorData[12];
+        // TODO test baro
+
+        if(!MPU9265_ReadData(&s_MPU9265Inst, Sensor_MPU9265Callback, &s_MPU9265Inst))
+        {
+            // couln't initiate a read
+        }
+
+        HIDE_Workload_EstimateStart(p_workHandle);
+        EventBits_t x_sensorEventBits;
+        //  Wait for sensor received event
+        x_sensorEventBits = xEventGroupWaitBits(gx_sensor_EventGroup,
+                event_RECEIVED_pf_sensorData,
+                pdTRUE,          // clear Bits before returning.
+                pdTRUE,          // wait for all Bits
+                SENSOR_READ_TIMEOUT_MS / portTICK_PERIOD_MS ); // maximum wait time
+
+        // unblock because of timeout, or i2cError?
+        uint8_t ui8_error=(event_RECEIVED_pf_sensorData & x_sensorEventBits == 0) || ui8_i2cErrorFlag != 0;
+        if( ui8_error )
+        {
+           xEventGroupSetBits(gx_fault_EventGroup,fault_SENSOR);
+        }
+        else
+        {
+           xEventGroupClearBits(gx_fault_EventGroup,fault_SENSOR);
+           HIDE_senMesRec_Increment(event_RECEIVED_pf_sensorData);
+        }
+        HIDE_Fault_Increment(fault_SENSOR,ui8_error);
+
+        // Get MPU data and convert it
+        MPU9265_AK8963_GetRawData(&s_MPU9265Inst, &s_MPU9265_AK8963_rawData);
+        MPUrawData2Float(pf_sensorData);
+        // Correct MPU data
+        MPUAxis2QCAxis(pf_sensorData);
+        convertMPUData(pf_sensorData);
+        correctMPUOffset(pf_sensorData, 0);
 
         // Get attitude quaternion via sensor fusion from MPU data
-        MadgwickAHRSupdate(sensor_data[X_ACCEL], sensor_data[Y_ACCEL], sensor_data[Z_ACCEL],
-                           sensor_data[X_GYRO],  sensor_data[Y_GYRO], sensor_data[Z_GYRO],
-                           sensor_data[X_MAGNET], sensor_data[Y_MAGNET], sensor_data[Z_MAGNET],
+        MadgwickAHRSupdate(pf_sensorData[X_ACC], pf_sensorData[Y_ACC], pf_sensorData[Z_ACC],
+                           pf_sensorData[X_GYRO],  pf_sensorData[Y_GYRO], pf_sensorData[Z_GYRO],
+                           pf_sensorData[X_MAG], pf_sensorData[Y_MAG], pf_sensorData[Z_MAG],
                            gf_sensor_attitudeQuaternion, gf_sensor_dotAttitudeQuaternion, dt);
 
         // Get Euler/Tait-Bryan angles from quaternion
         Math_QuatToEuler(gf_sensor_attitudeQuaternion, gf_sensor_fusedAngles);
         calculateAngularVelocity(gf_sensor_fusedAngles, gf_sensor_angularVelocity);
 
-
-
-        // calculate correct pressure for altitude control only every 10ms (5 loops) because conversion takes around >9ms
-        if(ui8_newPressValue == 1)
-        {
-            ui8_newPressValue = 0;
-            s_baroData = calculateBaroData(s_rawData.t_baro, s_rawData.p_baro, 0);
-            gf_sensor_pressure = s_baroData.f_pressure;
-            gf_sensor_altitude = calculateAltitude(s_baroData, 0, 0);
-
-
-
-        }
-
-}
-
+    }
 
 #elif ( setup_SENSOR_NONE == (setup_SENSOR&setup_MASK_OPT1) )
 
@@ -1091,101 +784,76 @@ static void correctIMUOffset(float* sensor_data,uint8_t calibrate){
 	void Sensor_InitSensor(void){}
 	void SensorCalibrate(void){}
 	void Sensor_ReadAndFusion(void){}
-
-
-#elif ( setup_SENSOR_SPI == (setup_SENSOR&setup_MASK_OPT1) )
-
-	#error ERROR: not portet yet, define a nother setup_SENSOR (in qc_setup.h) or port it from Eckstein
 #else
-
 	#error ERROR: define setup_SENSOR (in qc_setup.h)
-
 #endif
 
 /**
- * \brief	if calibration is required, start calibration.
+ * \brief   if calibration is required, start calibration.
  *
- *			calibrate for a minimum time of x ms.
- *			(x is defined in the driver)
- * \param	elapseTimeMS	elapsed time between last call
+ *          calibrate for a minimum time of x ms.
+ *          (x is defined in the driver)
+ * \param   elapseTimeMS    elapsed time between last call
  */
 void Sensor_Calibrate(int32_t elapseTimeMS)
 {
-	if(IS_CALIBRAE_REQUIRED(i32_stateTime))
-	{
+    if(IS_CALIBRAE_REQUIRED(i32_stateTime))
+    {
 
-		SensorCalibrate();
-		i32_stateTime+=elapseTimeMS;
-		if(i32_stateTime>=CALIBRATE_MIN_TIME_MS)
-			i32_stateTime=CALIBRATE_MIN_TIME_MS;
-	}
+        SensorCalibrate();
+        i32_stateTime+=elapseTimeMS;
+        if(i32_stateTime>=CALIBRATE_MIN_TIME_MS)
+            i32_stateTime=CALIBRATE_MIN_TIME_MS;
+    }
 }
 
 /**
- * \brief	stopts the requirement of the sensor to calibrate
+ * \brief   stopts the requirement of the sensor to calibrate
  */
 void Sensor_CalibrateStop(void)
 {
-	i32_stateTime=CALIBRATE_STOP;
+    i32_stateTime=CALIBRATE_STOP;
 
 }
 
 /**
- * \brief	requires the sensor to start calibration
+ * \brief   requires the sensor to start calibration
  *
- *			(this does not calibrate, only requires
- *			use Sensor_Calibrate to calibrate)
+ *          (this does not calibrate, only requires
+ *          use Sensor_Calibrate to calibrate)
  */
 void Sensor_CalibrateRequire(void)
 {
-	if(!IS_CALIBRAE_REQUIRED(i32_stateTime))
-		i32_stateTime=CALIBRATE_START;
+    if(!IS_CALIBRAE_REQUIRED(i32_stateTime))
+        i32_stateTime=CALIBRATE_START;
 }
 
 /**
- * \brief	get the state of the sensor calibration
- * \return	true if calibration is not running or ( calibration is running but long enough )
- *			false else
+ * \brief   get the state of the sensor calibration
+ * \return  true if calibration is not running or ( calibration is running but long enough )
+ *          false else
  */
 uint8_t Sensor_IsCalibrateReady(void)
 {
-	if(i32_stateTime==CALIBRATE_STOP)
-		return true;
-	if(i32_stateTime>=CALIBRATE_MIN_TIME_MS)
-		return true;
-	return false;
+    if(i32_stateTime==CALIBRATE_STOP)
+        return true;
+    if(i32_stateTime>=CALIBRATE_MIN_TIME_MS)
+        return true;
+    return false;
 }
 
 /**
- * \brief	return true if calibration is required
- * \return	true  if calibration is required,
- *			false else
+ * \brief   return true if calibration is required
+ * \return  true  if calibration is required,
+ *          false else
  */
 uint8_t Sensor_IsCalibrateRequired(void)
 {
 
-	return IS_CALIBRAE_REQUIRED(i32_stateTime);
+    return IS_CALIBRAE_REQUIRED(i32_stateTime);
 
 }
 
-
-
-
-#if (setup_DEV_DEBUG_USB)
-
-    /**
-     * \brief   send data of Sensor over USB to PC application
-     */
-    void HIDE_Sensor_SendDataOverUSB(void)
-    {
-
-
-        gf_usb_debug[0] = gf_sensor_pressure;
-
-
-
-        HIDE_Debug_USB_InterfaceSend(gf_usb_debug, sizeof(gf_usb_debug)/ sizeof(gf_usb_debug[0]), debug_FLOAT);
-
-
-    }
-#endif
+//=====================================================================================================
+// End of file
+//=====================================================================================================

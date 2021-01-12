@@ -1,29 +1,50 @@
 //=====================================================================================================
-// MadgwickAHRS.h
+// @file ak8963_registers.h
 //=====================================================================================================
 //
-// Implementation of Madgwick's AHRS algorithm.
+// @brief List of used registers from ak8963 magnotemeter
 //
-// Date			Author          Notes
-// 29/09/2011	SOH Madgwick    Initial release
-// 02/10/2011	SOH Madgwick	Optimised for reduced CPU load
-// 06/12/2020   Tomas Schweizer Overall changes to fit to application HTWG-QC
+// Date                 Author                      Notes
+// @date 06/12/2020     @author Tomas Schweizer     Implementation
 //
 // Source:
-// http://www.x-io.co.uk/node/8#open_source_ahrs_and_imu_algorithms
+// TivaWare SensorLib
+//
 //=====================================================================================================
-
-#ifndef __MADGWICKAHRS_H__
-#define __MADGWICKAHRS_H__
+#ifndef AK8963_REGISTERS_H_
+#define AK8963_REGISTERS_H_
 
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                     Include File Definitions                                       */
 /* ---------------------------------------------------------------------------------------------------*/
-#include <stdint.h>
 
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                      Defines                                                       */
 /* ---------------------------------------------------------------------------------------------------*/
+// i2c address
+#define AK8963_ADDRESS              0x0C
+
+// registers
+#define AK8963_HXL                  0x03        // X-axis LSB output register
+#define AK8963_HXH                  0x04        // X-axis MSB output register
+#define AK8963_HYL                  0x05        // Y-axis LSB output register
+#define AK8963_HYH                  0x06        // Y-axis MSB output register
+#define AK8963_HZL                  0x07        // Z-axis LSB output register
+#define AK8963_HZH                  0x08        // Z-axis MSB output register
+#define AK8963_CNTL1                0x0A        // Control register
+#define AK8963_CNTL2                0x0B        // Control 2 register
+#define AK8963_ASTC                 0x0C        // Self-test register
+#define AK8963_ASAX                 0x10        // X-axis sensitivity register
+#define AK8963_ASAY                 0x11        // Y-axis sensitivity register
+#define AK8963_ASAZ                 0x12        // Z-axis sensitivity register
+
+// bits in registers
+#define AK8963_CNTL2_SRST           0x01        // Register reset
+#define AK8963_CNTL_MODE_CONT_2     0x06        // Continuous measurement mode 2 (100Hz)
+#define AK8963_CNTL_MODE_SELF_TEST  0x08        // Self-test mode
+#define AK8963_CNTL_BITM_16BIT      0x10        // 16-bit output
+#define AK8963_CNTL_MODE_FUSE_ROM   0x0F        // Fuse ROM access mode
+#define AK8963_ASTC_SELF            0x40        // Generate magnetic field for self-test
 
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                      Type Definitions                                              */
@@ -36,10 +57,10 @@
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                      API Procedure Definitions                                     */
 /* ---------------------------------------------------------------------------------------------------*/
-extern void MadgwickAHRSupdate(float ax, float ay, float az, float gx, float gy, float gz, float mx, float my, float mz, volatile float q[4], volatile float qDot[4], float dt);
 
-#endif  // __MADGWICKAHRS_H__
 
+#endif /* AK8963_REGISTERS_H_ */
 //=====================================================================================================
 // End of file
 //=====================================================================================================
+

@@ -28,7 +28,6 @@
 #define periph_MASK_PORT				 	0xFFFFFF00
 #define periph_MASK_PIN					 	0x000000FF
 #define periph_SPLIT_PORT_PIN(debug_PIN) 	debug_PIN&periph_MASK_PORT,debug_PIN&periph_MASK_PIN
-
 #define periph_NONE			0xFFFFFFFF
 
 //
@@ -91,13 +90,6 @@
 // New implementation USB Debug Peripherals TODO check if correct edit comment
 #if( setup_DEBUG_USB == (setup_DEBUG&setup_MASK_OPT1) )
 
-    #define periph_DEBUG_USB_BASE              USB0_BASE
-
-#endif
-
-#if (setup_DEBUG_UART_USB == (setup_DEBUG&setup_MASK_OPT1) )
-
-    #define periph_DEBUG_UART_BASE             UART0_BASE
     #define periph_DEBUG_USB_BASE              USB0_BASE
 
 #endif

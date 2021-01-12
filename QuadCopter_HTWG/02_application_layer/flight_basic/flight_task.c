@@ -44,7 +44,7 @@
 /*				Local Defines									*/
 /* ------------------------------------------------------------ */
 
-#define TASK_STACK_SIZE        	 		( 150 )       // Stack size in words
+#define TASK_STACK_SIZE        	 		( 250 )       // Stack size in words
 #define TASK_PERIOD_MS			 		( 2 )
 
 #define LANDING_TIME_MS					( 5000 )	  // time for the transition of the states LANDING -> RESTING
@@ -69,7 +69,6 @@ enum transitionState_e
 /*				Forward Declarations							*/
 /* ------------------------------------------------------------ */
 
-uint32_t       FlightTask_Init(void);
 static void    FlightTask(void *pvParameters);
 static void    StateFlying(EventBits_t x_faultEventBits);
 static void    StateLanding(EventBits_t x_faultEventBits);
@@ -83,8 +82,9 @@ static void    StateResting(void);
 /* ------------------------------------------------------------ */
 
 // used global variables
-extern volatile uint32_t 		  gui32_receiver_flightStabInput;
-extern volatile EventGroupHandle_t gx_fault_EventGroup;
+extern volatile uint32_t 		    gui32_receiver_flightStabInput;
+extern volatile EventGroupHandle_t  gx_fault_EventGroup;
+
 
 /**
  * \brief	set point values for flight stabilisation.
@@ -102,6 +102,9 @@ float gf_flight_setPoint[4];
  * \note	Write access:	flight_task
  */
 enum flight_state_e ge_flight_state=RESTING;
+
+
+countEdges_handle_p p_flight_countEdges;
 
 /* ------------------------------------------------------------ */
 /*				Local Variables									*/
@@ -159,6 +162,7 @@ uint32_t FlightTask_Init(void)
 	HIDE_Display_InsertDrawFun(HIDE_Control_PID_TUNE_DrawDisplay);
     #endif
 
+
     TaskHandle_t  x_TaskHandle;
 	// Create the flight task.
     if(xTaskCreate(FlightTask,"FlightTask", TASK_STACK_SIZE, math_NULL,
@@ -187,6 +191,8 @@ static void FlightTask(void *pvParameters)
 
 	Motor_InitMotor();
 	Sensor_InitSensor();
+
+
 	TickType_t  x_lastWakeTime;
 	EventBits_t x_faultEventBits;
 
@@ -292,7 +298,7 @@ static void StateFlying(EventBits_t x_faultEventBits)
 	ReceiverTask_GetSetPoints(&gf_flight_setPoint[0]);
 
 	// throttle back but with flight stabilization
-	if ( fault_MOTOR_OVER_CURRENT & x_faultEventBits )
+	if ( fault_MOTOR & x_faultEventBits )
 		if(gf_flight_setPoint[flight_THROTTLE]>MOTOR_OVERCURRENT_MAX_THROTTLE)
 			gf_flight_setPoint[flight_THROTTLE]=MOTOR_OVERCURRENT_MAX_THROTTLE;
 
@@ -408,3 +414,6 @@ static uint8_t IsFlyingPossible(EventBits_t x_faultEventBits)
 {
 	return (((fault_MOTOR|fault_SENSOR|gui32_receiver_flightStabInput) & x_faultEventBits) == 0 );
 }
+
+
+

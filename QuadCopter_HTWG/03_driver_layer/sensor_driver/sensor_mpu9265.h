@@ -1,25 +1,26 @@
 //=====================================================================================================
-// MadgwickAHRS.h
+// @file sensor_mpu9265.h
 //=====================================================================================================
 //
-// Implementation of Madgwick's AHRS algorithm.
+// @brief Implementation of a mpu9265 function library
 //
-// Date			Author          Notes
-// 29/09/2011	SOH Madgwick    Initial release
-// 02/10/2011	SOH Madgwick	Optimised for reduced CPU load
-// 06/12/2020   Tomas Schweizer Overall changes to fit to application HTWG-QC
+// Date                 Author                      Notes
+// @date 06/12/2020     @author Tomas Schweizer     Overall changes to fit to application
 //
 // Source:
-// http://www.x-io.co.uk/node/8#open_source_ahrs_and_imu_algorithms
+// TivaWare SensorLib
+//
 //=====================================================================================================
 
-#ifndef __MADGWICKAHRS_H__
-#define __MADGWICKAHRS_H__
+#ifndef __SENSOR_MPU9265_H__
+#define __SENSOR_MPU9265_H_
 
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                     Include File Definitions                                       */
 /* ---------------------------------------------------------------------------------------------------*/
 #include <stdint.h>
+
+#include "sensorlib/i2cm_drv.h"
 
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                      Defines                                                       */
@@ -28,6 +29,67 @@
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                      Type Definitions                                              */
 /* ---------------------------------------------------------------------------------------------------*/
+// Struct for MPU9265 and AK8963 raw data
+typedef struct
+{
+    int16_t i16_accX;
+    int16_t i16_accY;
+    int16_t i16_accZ;
+    int16_t i16_gyroX;
+    int16_t i16_gyroY;
+    int16_t i16_gyroZ;
+    int16_t i16_magX;
+    int16_t i16_magY;
+    int16_t i16_magZ;
+
+} MPU9265_AK8963_rawData_s;
+
+// Struct for Magnetometer AK8975_s integrated in MPU9250
+typedef struct
+{
+    // I2c master instance
+    tI2CMInstance *ps_i2cMastInst;
+
+    // I2c device address
+    uint8_t ui8_AK8693Address;
+
+    uint8_t ui8_AK8963State;
+
+    uint8_t pui8_AK8963ReadBuffer[8];
+
+    uint8_t pui8_AK8963WriteBuffer[8];
+
+    // pointer to the function which is called when request is finished
+    tSensorCallback *fp_AK8963Callback;
+
+    void *p_AK8963CallbackData;
+
+} AK8963_s;
+
+
+// Struct for MPU925x
+typedef struct
+{
+    // I2c master instance
+    tI2CMInstance *ps_i2cMastInst;
+
+    // Instannce of the Magnetometer
+    AK8963_s s_AK8963Inst;
+
+    // I2c Address of MPU9250
+    uint8_t ui8_MPU9265Address;
+
+    // State of the MPU9265
+    uint8_t ui8_MPU9265State;
+
+    uint8_t pui8_MPU9265ReadBuffer[24];
+
+    uint8_t pui8_MPU9265WriteBuffer[8];
+
+    tSensorCallback *fp_MPU9265Callback;
+
+    void *p_MPU9265CallbackData;
+} MPU9265_s;
 
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                      Global Variables                                              */
@@ -36,10 +98,15 @@
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                      API Procedure Definitions                                     */
 /* ---------------------------------------------------------------------------------------------------*/
-extern void MadgwickAHRSupdate(float ax, float ay, float az, float gx, float gy, float gz, float mx, float my, float mz, volatile float q[4], volatile float qDot[4], float dt);
+extern uint8_t MPU9265_Init(MPU9265_s *ps_inst, tI2CMInstance *ps_I2CMInst, uint8_t ui8_MPU9265Address,
+                            tSensorCallback *fp_MPU9265Callback, void *p_MPU9265CallbackData);
+extern uint8_t MPU9265_ReadData(MPU9265_s *ps_inst, tSensorCallback *fp_MPU9265Callback, void *p_MPU9265CallbackData);
 
-#endif  // __MADGWICKAHRS_H__
+extern void  MPU9265_AK8963_GetRawData(MPU9265_s *ps_inst, MPU9265_AK8963_rawData_s *s_rawData);
 
+#endif /* _SENSOR_MPU925X_H_ */
 //=====================================================================================================
 // End of file
 //=====================================================================================================
+
+
