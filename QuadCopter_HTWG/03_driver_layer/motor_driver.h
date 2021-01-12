@@ -1,36 +1,36 @@
-/**
- * 		@file 	motor_driver.h
- * 		@brief	Funktions to init, output and read the motor.
- *//*	@author Tobias Grimm
- * 		@date 	30.05.2016	(last modified)
- */
+//=====================================================================================================
+// @file motor_driver.h
+//=====================================================================================================
+//
+// @brief API to interact with the motors.
+//
+// Date                 Author                      Notes
+// @date 31/05/2016     @author Tobias Grimm        Implementation
+// @date 06/12/2020     @author Tomas Schweizer     Overall changes
+//
+// Source:
+//
+//
+//=====================================================================================================
 
 #ifndef __MOTOR_DRIVER_H__
 #define	__MOTOR_DRIVER_H__
 
-/* ------------------------------------------------------------ */
-/*					Include File Definitions					*/
-/* ------------------------------------------------------------ */
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                     Include File Definitions                                       */
+/* ---------------------------------------------------------------------------------------------------*/
 
 #include <stdint.h>
 
-/* ------------------------------------------------------------ */
-/*				   	Defines			    						*/
-/* ------------------------------------------------------------ */
-/** \brief  MOTOR_DATA receiver eventBit*/
-#define written_MOTOR_DATA                  ( 2 << 0 )
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                      Defines                                                       */
+/* ---------------------------------------------------------------------------------------------------*/
 /** \brief	Number of Motors */
-#define motor_COUNT		( 4 )
+#define motor_COUNT		            ( 4 )
 
-//  ### States of the motor
-//#define motor_STATE_RUNNING     	  		  ( 255 )
-//#define motor_STATE_NOT_RUNNING 	  		  ( 250 )						  /* ready for operation */
-//#define motor_STATE_CURRENT_LIMIT(state)	  ( state > 50  && state < 247 )  /* 247==96,9% ... 50==19,6%   (255==100%) */
-//#define motor_STATE_STARTING	      		  ( 40 )
-
-/* ------------------------------------------------------------ */
-/*				   	Type Definitions			    			*/
-/* ------------------------------------------------------------ */
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                      Type Definitions                                              */
+/* ---------------------------------------------------------------------------------------------------*/
 
 // TODO changed to uint16 from uint8 fro all read data test if working
 /** \brief	structure to store information for one motor. */
@@ -45,26 +45,25 @@ typedef struct motor_Data_s
 
 } motor_Data_s;
 
-/* ------------------------------------------------------------ */
-/*					API Procedure Declarations					*/
-/* ------------------------------------------------------------ */
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                      Global Variables                                              */
+/* ---------------------------------------------------------------------------------------------------*/
+extern volatile motor_Data_s gs_motor[motor_COUNT];
+extern volatile uint32_t     gui32_motor_fault;
 
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                      API Procedure Definitions                                     */
+/* ---------------------------------------------------------------------------------------------------*/
 extern void Motor_InitPeriph(void);
 extern void Motor_InitMotor(void);
 extern void Motor_OutputAll(void);
 extern void Motor_StopAll(void);
-extern void Motor_Read(uint8_t ui8_motorNr);
-extern void Motor_ReadAll(void);
 extern void Motor_DrawDisplay(void);
-void HIDE_Motor_SendDataOverUSB(void);
+extern void HIDE_Motor_SendDataOverUSB(void);
 
-
-/* ------------------------------------------------------------ */
-/*					Global Variables							*/
-/* ------------------------------------------------------------ */
-extern volatile motor_Data_s gs_motor[motor_COUNT];
-extern volatile uint32_t 	 gui32_motor_fault;
-
-/* ------------------------------------------------------------ */
 
 #endif // __MOTOR_DRIVER_H__
+
+//=====================================================================================================
+// End of file
+//=====================================================================================================

@@ -2,7 +2,7 @@
 // @file sensor_driver.c
 //=====================================================================================================
 //
-// @brief Implementation of Madgwick's AHRS algorithm.
+// @brief API to interact with the sensors.
 //
 // Date                 Author                      Notes
 // @date 31/05/2016     @author Tobias Grimm        Implementation
@@ -61,8 +61,9 @@
 #define IS_CALIBRAE_REQUIRED(stateTime)     (stateTime>=0 || stateTime == -2)
 
 /** \brief  sensor eventBit*/
-#define event_SENSOR_BIT_COUNT                           ( 2 )
-#define event_RECEIVED_pf_sensorData                ( 1 << 0 )
+#define event_SENSOR_BIT_COUNT              ( 2 )
+#define event_SENSOR_RECEIVED               ( 1 << 0 )
+#define event_SENSOR_REQUEST                ( 1 << 1 )
 
 #define dt 0.002f
 
@@ -226,7 +227,7 @@ void Sensor_DrawDisplay(void)
 /*                                      Select Mode                                                   */
 /* ---------------------------------------------------------------------------------------------------*/
 
-#if   ( setup_SENSOR_I2C == (setup_SENSOR&setup_MASK_OPT1) ) || DOXYGEN
+#if ( setup_SENSOR_I2C == (setup_SENSOR&setup_MASK_OPT1) ) || DOXYGEN
 
     /* -----------------------------------------------------------------------------------------------*/
     /*                                     Include File Definitions i2c Mode                          */
@@ -316,7 +317,7 @@ void Sensor_DrawDisplay(void)
 
 
     /* ---------------------------------------------------------------------------------------------------*/
-    /*                                      Global Variables i2c Mode                                      */
+    /*                                      Global Variables i2c Mode                                     */
     /* ---------------------------------------------------------------------------------------------------*/
 
     #if(periph_SENSOR_INT==periph_MOTOR_INT)
@@ -385,7 +386,7 @@ void Sensor_DrawDisplay(void)
 //    static baroData_s s_baroData;
 
     /* -----------------------------------------------------------------------------------------------*/
-    /*                                      Procedure Definitions i2c mode                                    */
+    /*                                      Procedure Definitions i2c mode                            */
     /* -----------------------------------------------------------------------------------------------*/
 
     /**
@@ -572,7 +573,7 @@ void Sensor_DrawDisplay(void)
 
             // fire eventBit to notify Sensor Read has finished
             BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-            if(pdFAIL==xEventGroupSetBitsFromISR(gx_sensor_EventGroup, event_RECEIVED_pf_sensorData, &xHigherPriorityTaskWoken))
+            if(pdFAIL==xEventGroupSetBitsFromISR(gx_sensor_EventGroup, event_SENSOR_RECEIVED, &xHigherPriorityTaskWoken))
                 while(1);// you will come here, when configTIMER_QUEUE_LENGTH is full
             else
                 portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
@@ -632,7 +633,7 @@ void Sensor_DrawDisplay(void)
             {
                 while(1); // creation didn't work
             }
-            HIDE_senMesRec_SetEventName(event_RECEIVED_pf_sensorData, "Sen");
+            HIDE_senMesRec_SetEventName(event_SENSOR_RECEIVED, "Sen");
         #endif
     }
 
@@ -643,7 +644,7 @@ void Sensor_DrawDisplay(void)
     {
 
         xEventGroupClearBits(gx_fault_EventGroup,fault_SENSOR);
-        xEventGroupClearBits(gx_sensor_EventGroup,event_RECEIVED_pf_sensorData);
+        xEventGroupClearBits(gx_sensor_EventGroup,event_SENSOR_RECEIVED);
 
         // if returned zero init was not succesfull
         if(!MPU9265_Init(&s_MPU9265Inst, &i2cMastInst_s, I2C_MPU_ADRESS, Sensor_MPU9265Callback, &s_MPU9265Inst))
@@ -652,13 +653,13 @@ void Sensor_DrawDisplay(void)
         EventBits_t x_sensorEventBits;
         //  Wait for sensor received event
         x_sensorEventBits = xEventGroupWaitBits(gx_sensor_EventGroup,
-        event_RECEIVED_pf_sensorData,
-        pdTRUE,          // clear Bits before returning.
-        pdTRUE,          // wait for all Bits
-        SENSOR_INIT_TIMEOUT_MS / portTICK_PERIOD_MS ); // maximum wait time
+                                                event_SENSOR_RECEIVED,
+                                                pdTRUE,          // clear Bits before returning.
+                                                pdTRUE,          // wait for all Bits
+                                                SENSOR_INIT_TIMEOUT_MS / portTICK_PERIOD_MS ); // maximum wait time
 
         // unblock because of timeout, or i2cError?
-        uint8_t ui8_error=(event_RECEIVED_pf_sensorData & x_sensorEventBits == 0) || ui8_i2cErrorFlag != 0;
+        uint8_t ui8_error=(event_SENSOR_RECEIVED & x_sensorEventBits == 0) || ui8_i2cErrorFlag != 0;
         if( ui8_error )
         {
            xEventGroupSetBits(gx_fault_EventGroup,fault_SENSOR);
@@ -689,13 +690,13 @@ void Sensor_DrawDisplay(void)
         EventBits_t x_sensorEventBits;
         //  Wait for sensor received event
         x_sensorEventBits = xEventGroupWaitBits(gx_sensor_EventGroup,
-               event_RECEIVED_pf_sensorData,
-               pdTRUE,          // clear Bits before returning.
-               pdTRUE,          // wait for all Bits
-               SENSOR_READ_TIMEOUT_MS / portTICK_PERIOD_MS ); // maximum wait time
+                                                   event_SENSOR_RECEIVED,
+                                                   pdTRUE,          // clear Bits before returning.
+                                                   pdTRUE,          // wait for all Bits
+                                                   SENSOR_READ_TIMEOUT_MS / portTICK_PERIOD_MS ); // maximum wait time
 
         // unblock because of timeout, or i2cError?
-        uint8_t ui8_error=(event_RECEIVED_pf_sensorData & x_sensorEventBits == 0) || ui8_i2cErrorFlag != 0;
+        uint8_t ui8_error=(event_SENSOR_RECEIVED & x_sensorEventBits == 0) || ui8_i2cErrorFlag != 0;
         if( ui8_error )
         {
            xEventGroupSetBits(gx_fault_EventGroup,fault_SENSOR);
@@ -703,7 +704,7 @@ void Sensor_DrawDisplay(void)
         else
         {
            xEventGroupClearBits(gx_fault_EventGroup,fault_SENSOR);
-           HIDE_senMesRec_Increment(event_RECEIVED_pf_sensorData);
+           HIDE_senMesRec_Increment(event_SENSOR_RECEIVED);
         }
         HIDE_Fault_Increment(fault_SENSOR,ui8_error);
 
@@ -740,13 +741,13 @@ void Sensor_DrawDisplay(void)
         EventBits_t x_sensorEventBits;
         //  Wait for sensor received event
         x_sensorEventBits = xEventGroupWaitBits(gx_sensor_EventGroup,
-                event_RECEIVED_pf_sensorData,
-                pdTRUE,          // clear Bits before returning.
-                pdTRUE,          // wait for all Bits
-                SENSOR_READ_TIMEOUT_MS / portTICK_PERIOD_MS ); // maximum wait time
+                                                event_SENSOR_RECEIVED,
+                                                pdTRUE,          // clear Bits before returning.
+                                                pdTRUE,          // wait for all Bits
+                                                SENSOR_READ_TIMEOUT_MS / portTICK_PERIOD_MS ); // maximum wait time
 
         // unblock because of timeout, or i2cError?
-        uint8_t ui8_error=(event_RECEIVED_pf_sensorData & x_sensorEventBits == 0) || ui8_i2cErrorFlag != 0;
+        uint8_t ui8_error=(event_SENSOR_RECEIVED & x_sensorEventBits == 0) || ui8_i2cErrorFlag != 0;
         if( ui8_error )
         {
            xEventGroupSetBits(gx_fault_EventGroup,fault_SENSOR);
@@ -754,7 +755,7 @@ void Sensor_DrawDisplay(void)
         else
         {
            xEventGroupClearBits(gx_fault_EventGroup,fault_SENSOR);
-           HIDE_senMesRec_Increment(event_RECEIVED_pf_sensorData);
+           HIDE_senMesRec_Increment(event_SENSOR_RECEIVED);
         }
         HIDE_Fault_Increment(fault_SENSOR,ui8_error);
 

@@ -363,7 +363,7 @@ void Control_Mixer(void)
 	motor[2] = MIX(-1.0f,+1.0f,+1.0f); //Motor VR
 	motor[3] = MIX(-1.0f,-1.0f,-1.0f); //Motor HR
 
-	for(i=0;i<4;++i)
+	for(i=0;i<motor_COUNT;++i)
 	{
 		motor[i]=math_LIMIT(motor[i],0.1f,1.0f);
 		gs_motor[i].ui16_setPoint=(uint16_t)(motor[i]*0xFFFF);
