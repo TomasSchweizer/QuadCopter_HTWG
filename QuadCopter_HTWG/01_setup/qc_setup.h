@@ -16,6 +16,7 @@
 // Select Addons for the Quadcopter (1 -> include, 0 -> exclude)
 #define setup_QC_BASIC  				( 1 )					// basic setup to fly with remote control
 #define setup_QC_DEVELOPMENT  			( 1 )					// enable development addons (see below)
+#define setup_QC_ALTITUDE_HOLD          ( 1 )
 #define setup_QC_AUTONOMOUS_NAVIGATION  ( 0 )					// not implemented yet
 #define setup_QC_KAMERA_ADDON			( 0 )					// not implemented yet
 
@@ -35,6 +36,12 @@
 
 #endif
 
+#if setup_QC_ALTITUDE_HOLD
+
+    #define setup_ALT_BARO              ( 1 )
+    #define setup_ALT_LIDAR             ( 1 )
+
+#endif
 /* ------------------------------------------------------------ */
 /*				Select hardware setup			    			*/
 /* ------------------------------------------------------------ */

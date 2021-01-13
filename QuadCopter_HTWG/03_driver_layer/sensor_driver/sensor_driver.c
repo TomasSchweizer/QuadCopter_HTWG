@@ -17,6 +17,7 @@
 /*                                     Include File Definitions                                       */
 /* ---------------------------------------------------------------------------------------------------*/
 #include <stdint.h>
+#include <math.h>
 
 // own header file
 #include "sensor_driver.h"
@@ -50,8 +51,20 @@
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                      Local Defines                                                 */
 /* ---------------------------------------------------------------------------------------------------*/
-#define SENSOR_INIT_TIMEOUT_MS      ( 10 )
-#define SENSOR_READ_TIMEOUT_MS		( 1 )
+#define SENSOR_MPU_INIT_TIMEOUT_MS          ( 3 )
+#define SENSOR_READ_TIMEOUT_MS		        ( 1.1 )
+
+#if (setup_ALT_BARO)
+    #define SENSOR_BARO_INIT_TIMEOUT_MS     ( 3000 ) // TODO test but takes quit some time
+    #define SENSOR_BARO_READ_TIMEOUT_MS     ( 1 )
+
+    // defines for read timing barometer
+    #define SENSOR_BARO_MEASUREMENT                 ( 5 )   // every 5th loop read data
+    #define SENSOR_BARO_MEASUREMENT_TEMP            ( 20 )  // every 20th measurement read temp
+    #define SENSOR_BARO_READ_TEMP_REQ_PRESS         ( 6 )
+    #define SENSOR_BARO_READ_PRESS_REQ_TEMP         ( 7 )
+    #define SENSOR_BARO_READ_PRESS_REQ_PRESS        ( 8 )
+#endif
 
 
 #define CALIBRATE_MIN_TIME_MS               5000//###5000
@@ -63,7 +76,8 @@
 /** \brief  sensor eventBit*/
 #define event_SENSOR_BIT_COUNT              ( 2 )
 #define event_SENSOR_RECEIVED               ( 1 << 0 )
-#define event_SENSOR_REQUEST                ( 1 << 1 )
+#define event_SENSOR_BARO_RECEIVED          ( 1 << 1 )
+
 
 #define dt 0.002f
 
@@ -78,10 +92,13 @@ enum sensorAxis_e{
     X_MAG,
     Y_MAG,
     Z_MAG,
+
+};
+
+enum sensorBaro_e{
+
     T_BARO,
     P_BARO,
-    A_LIDAR
-
 };
 
 /* ---------------------------------------------------------------------------------------------------*/
@@ -221,6 +238,15 @@ void Sensor_DrawDisplay(void)
         u8g_DrawStr(&gs_display,72+16,  yOffset + 0, u8g_u8toa(yaw_value, 3));
     }
 
+    #if ( setup_ALT_BARO )
+
+
+    u8g_DrawStr(&gs_display, 58, 20,"Al");
+    u8g_DrawStr(&gs_display, 70, 20, u8g_u16toa((uint16_t)gf_sensor_altitude,4));
+
+
+    #endif
+
 }
 
 /* ---------------------------------------------------------------------------------------------------*/
@@ -253,7 +279,7 @@ void Sensor_DrawDisplay(void)
     // sensor lib files
     #include "sensor_mpu9265.h"
 
-
+    #include "sensor_ms5611.h"
 
 
 
@@ -261,27 +287,26 @@ void Sensor_DrawDisplay(void)
     /*                                     Local defines i2c Mode                                     */
     /* -----------------------------------------------------------------------------------------------*/
 
-    // define if barometer and lidar should be enabled
-    #define BARO_INIT                           ( 0 )
-    #define LIDAR_INIT                          ( 0 )
-
     // define i2c addresses of sensors
     #define I2C_MPU_ADRESS                      MPU9265_ADDRESS
     #define I2C_AK_ADDRESS                      AK8963_ADDRESS
     #define I2C_MS_ADDRESS                      MS5611_ADDRESS
     #define I2C_LI_ADDRESS                      0 // TODO change after implementation
 
-    // define the desired peripheral setup (see peripheral_setup.h)
-    #if ( periph_SENSOR_INT == INT_I2C2 )
-        #define SYSCTL_PERIPH_I2C           SYSCTL_PERIPH_I2C2
-        #define I2C_PERIPH_BASE             I2C2_BASE
-        #define SYSCTL_PERIPH_PORT          SYSCTL_PERIPH_GPIOE
-        #define PORT_BASE                   GPIO_PORTE_BASE
-        #define I2C_SCL                     GPIO_PE4_I2C2SCL
-        #define SCL_PIN                     GPIO_PIN_4
-        #define I2C_SDA                     GPIO_PE5_I2C2SDA
-        #define SDA_PIN                     GPIO_PIN_5
-    #elif ( periph_SENSOR_INT == INT_I2C1 )
+    #if ( setup_ALT_BARO )
+
+        #define I2C_ALT_SYSCTL_PERIPH           SYSCTL_PERIPH_I2C2
+        #define I2C_ALT_PERIPH_BASE             I2C2_BASE
+        #define I2C_ALT_SYSCTL_PERIPH_PORT      SYSCTL_PERIPH_GPIOE
+        #define I2C_ALT_PORT_BASE               GPIO_PORTE_BASE
+        #define I2C_ALT_SCL                     GPIO_PE4_I2C2SCL
+        #define I2C_ALT_SCL_PIN                 GPIO_PIN_4
+        #define I2C_ALT_SDA                     GPIO_PE5_I2C2SDA
+        #define I2C_ALT_SDA_PIN                 GPIO_PIN_5
+    #endif
+
+
+    #if ( periph_SENSOR_INT == INT_I2C1 )
         #define I2C_SYSCTL_PERIPH           SYSCTL_PERIPH_I2C1
         #define I2C_PERIPH_BASE             I2C1_BASE
         #define I2C_SYSCTL_PERIPH_PORT      SYSCTL_PERIPH_GPIOA
@@ -303,17 +328,18 @@ void Sensor_DrawDisplay(void)
     /* ------------------------------------------------------------------------------------------------*/
 
     static void SensorCalibrate(void);
+
+    void Sensor_MPU9265Callback(void *pvCallbackData, uint_fast8_t ui8Status);
     static void MPUrawData2Float(float* pf_sensorData);
     static void MPUAxis2QCAxis(float* pf_sensorData);
     static void convertMPUData(float* pf_sensorData);
     static void correctMPUOffset(float* pf_sensorData, uint8_t calibrate);
     static void calculateAngularVelocity(float *pf_sensorData, float *angularVelocity);
 
-    void Sensor_MPU9265Callback(void *pvCallbackData, uint_fast8_t ui8Status);
 
-    // TODO baro functions enable later
-    //static baroData_s calculateBaroData(uint32_t t_baro, uint32_t p_baro, uint8_t calibrate);
-    //static float calculateAltitude(baroData_s baroData, float accel_z, uint8_t calibrate);
+    void Sensor_MS5611Callback(void *pvCallbackData, uint_fast8_t ui8Status);
+    static void calculatePressureAndTemp(MS5611_rawData_s *ps_rawData, float *pf_sensorBaroData);
+    static float calculateAltitude(float *pf_sensorBaroData, uint8_t calibrate);
 
 
     /* ---------------------------------------------------------------------------------------------------*/
@@ -326,15 +352,31 @@ void Sensor_DrawDisplay(void)
         static tI2CMInstance i2cMastInst_s;             // I2C master instance
     #endif
 
+    #if ( setup_ALT_BARO )
+        tI2CMInstance i2cAltMastInst_s;
+    #endif
+
     /* ---------------------------------------------------------------------------------------------------*/
     /*                                      Local Variables i2c Mode                                      */
     /* ---------------------------------------------------------------------------------------------------*/
 
-    // varibales for sensor functions
+    // flags for i2c transfer
+    static volatile uint8_t ui8_i2cFinishedFlag = 0;
+    static volatile uint8_t ui8_i2cErrorFlag = 0;
+    static volatile uint8_t ui8_i2cMPU9265DataReadFlag = 0;
+
+    // variables for MPU sensor functions
     MPU9265_s s_MPU9265Inst;
     MPU9265_AK8963_rawData_s s_MPU9265_AK8963_rawData;
+    static uint8_t ui8_mpuInitFlag = 0;
 
-
+    // variables for Baro sensor functions
+    MS5611_s s_MS5611Inst;
+    MS5611_rawData_s s_MS5611_rawData;
+    static uint16_t ui16_MS5611CalVal[6];
+    static uint8_t ui8_baroInitFlag = 0;
+    static uint8_t ui8_MS5611LoopCounter = 0;
+    static uint8_t ui8_MS5611MesCounter = 0;
 
 
     // struct for low pass filtering of acc data
@@ -350,16 +392,6 @@ void Sensor_DrawDisplay(void)
                                                  0.0,    0.9850,         0.0,
                                                  0.0,         0.0,    0.9861};
 
-    // variable for barometer calibration values
-    //static uint16_t ui16_baro_calibration[6];
-
-    // setup flags
-    static uint8_t ui8_mpuInitFlag = 0;
-
-    // flags for i2c transfer
-    static volatile uint8_t ui8_i2cFinishedFlag = 0;
-    static volatile uint8_t ui8_i2cErrorFlag = 0;
-    static volatile uint8_t ui8_i2cMPU9265DataReadFlag = 0;
 
 //  TODO check which variables are needed for barometer
 //    // Counter variables for Barometer (MS5611) loop
@@ -547,6 +579,129 @@ void Sensor_DrawDisplay(void)
 
     }
 
+    #if (setup_ALT_BARO)
+
+
+    /**
+        * \brief   ISR for I2C
+        *          Give the interrupt handle to the I2C Master instance
+        */
+       void Sensor_Alt_I2CIntHandler(void)
+       {
+           I2CMIntHandler(&i2cAltMastInst_s);
+       }
+
+       /**
+       * \brief   MS5611 sensor callback function only set flag computation in other functions
+       *
+       */
+       void Sensor_MS5611Callback(void *pvCallbackData, uint_fast8_t ui8_i2cState)
+       {
+           // check if i2c was a success else save error
+           if(ui8_i2cState == I2CM_STATUS_SUCCESS){
+
+               ui8_i2cErrorFlag = 0;
+
+               if(ui8_mpuInitFlag && ui8_baroInitFlag){
+                   HIDE_Workload_EstimateStop(p_workHandle);
+               }
+
+               // fire eventBit to notify Sensor Read has finished
+               BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+               if(pdFAIL==xEventGroupSetBitsFromISR(gx_sensor_EventGroup, event_SENSOR_BARO_RECEIVED, &xHigherPriorityTaskWoken))
+                   while(1);// you will come here, when configTIMER_QUEUE_LENGTH is full
+               else
+                   portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
+           }
+           else
+           {
+               ui8_i2cErrorFlag = 1;
+           }
+
+       }
+
+
+        /**
+         * \brief   Calculate temp and pressure from raw sensor values after datasheet
+         */
+        static void calculatePressureAndTemp(MS5611_rawData_s *ps_rawData, float *pf_sensorBaroData){
+
+            // help variables to calculate smoth pressure values (look at datasheet of MS5611)
+            int64_t OFF, OFF_C2, SENS, SENS_C1;
+            int32_t dT, TEMP, P;
+            float f_pressureDiff;
+            float pf_help;
+            static float f_pressureBase = 0.0;
+
+
+            //Calculate pressure as explained in the datasheet of the MS-5611.
+            dT = (int32_t) (ps_rawData->ui32_baroT - ui16_MS5611CalVal[4] * 256);
+            //Calculate Temperature in °C [2000 = 20,00C°] not necessary for application
+            TEMP = (int32_t) (2000 + dT * ui16_MS5611CalVal[5] / 8388608);
+            pf_sensorBaroData[T_BARO] = ((float) TEMP) *0.01;
+
+            OFF_C2 = (int64_t) ui16_MS5611CalVal[1] * 65536;
+            SENS_C1 =(int64_t) ui16_MS5611CalVal[0] * 32768;
+
+            OFF = OFF_C2 + ((int64_t)dT * (int64_t)ui16_MS5611CalVal[3]) / 128;
+            SENS = SENS_C1 + ((int64_t)dT * (int64_t)ui16_MS5611CalVal[2]) / 256;
+            P = (int32_t)(((ps_rawData->ui32_baroP * SENS) / 2097152 - OFF) / 32768);
+
+            pf_help= (float) P;
+
+            // Use a complementary filter to get a smoother pressure curve
+            f_pressureBase = f_pressureBase * 0.985 + pf_help * 0.015;
+
+            f_pressureDiff = f_pressureBase - pf_help;
+            // To still guarantee fast behaviour if the difference is to big and secure for malfunctions
+            f_pressureDiff = math_LIMIT(f_pressureDiff, -8.0, 8.0);
+            if(f_pressureDiff > 1.0 || f_pressureDiff < -1.0)
+            {
+                f_pressureBase -= f_pressureDiff / 6.0;
+            }
+
+            // set f_pressureBase
+            pf_sensorBaroData[P_BARO] = f_pressureBase;
+
+        }
+
+
+
+        /**
+        * \brief   Calculate altitude from temp and pressure values also after calibrate set
+        *          pressure reference to zero
+        */
+        static float calculateAltitude(float *pf_sensorBaroData , uint8_t calibrate)
+        {
+
+            float f_altitude;
+            static float f_pressureReference = 1035.0; // see level
+
+            // clean noise/values outside the resolution of the sensor from the pressure value
+            //float f_pressureClean, f_tempClean;
+            //modff(baroData.f_pressure, &pressureClean); // stores int part of pressure in pressureClean
+            //modff(baroData.f_temp, &tempClean);
+
+
+            if(calibrate == 1)
+            {
+                f_pressureReference = pf_sensorBaroData[P_BARO];
+            }
+            else
+            {
+                f_altitude = ((powf((f_pressureReference/pf_sensorBaroData[P_BARO]),
+                                  (1.0/5.257)) - 1.0)*(pf_sensorBaroData[T_BARO] + 273.15)) / 0.0065;
+            }
+
+            return f_altitude;
+
+        }
+
+
+
+
+    #endif
+
     /**
      * \brief   ISR for I2C
      *          Give the interrupt handle to the I2C Master instance
@@ -560,14 +715,14 @@ void Sensor_DrawDisplay(void)
     * \brief   MPU9265 sensor callback function only set flag computation in other functions
     *
     */
-    void Sensor_MPU9265Callback(void *pvCallbackData, uint_fast8_t ui8_i2cState){
-
+    void Sensor_MPU9265Callback(void *pvCallbackData, uint_fast8_t ui8_i2cState)
+    {
         // check if i2c was a success else save error
         if(ui8_i2cState == I2CM_STATUS_SUCCESS){
 
             ui8_i2cErrorFlag = 0;
 
-            if(ui8_mpuInitFlag){
+            if(ui8_mpuInitFlag && !ui8_baroInitFlag){
                 HIDE_Workload_EstimateStop(p_workHandle);
             }
 
@@ -583,6 +738,7 @@ void Sensor_DrawDisplay(void)
             ui8_i2cErrorFlag = 1;
         }
     }
+
 
     /**
      * \brief   Init the peripheral for the sensor driver
@@ -620,11 +776,41 @@ void Sensor_DrawDisplay(void)
                     0xff,
                     ROM_SysCtlClockGet());
 
-         // set optional eventBits name
-        HIDE_Fault_SetEventName(fault_SENSOR,"Sen");
 
-        // workload estimation for I2C
-        HIDE_Workload_EstimateCreate(&p_workHandle, "sI2C");
+
+        #if (setup_ALT_BARO)
+
+            ROM_IntPrioritySet(periph_SENSOR_ALT_INT, priority_SENSOR_ALT_ISR);      // I2C Sensorbus (MPU9265;Baro;LIDAR)
+
+            // Enable peripherial I2C
+            ROM_SysCtlPeripheralEnable(I2C_ALT_SYSCTL_PERIPH);
+            ROM_SysCtlPeripheralEnable(I2C_ALT_SYSCTL_PERIPH_PORT);
+
+            // Set GPIOs as I2C pins.
+            ROM_GPIOPinConfigure(I2C_ALT_SCL);
+            ROM_GPIOPinConfigure(I2C_ALT_SDA);
+
+            // open drain with pullups
+            ROM_GPIOPinTypeI2CSCL(I2C_ALT_PORT_BASE, I2C_ALT_SCL_PIN);
+            ROM_GPIOPinTypeI2C(I2C_ALT_PORT_BASE, I2C_ALT_SDA_PIN);
+
+
+            // i2c driver unit
+            I2CMInit(   &i2cAltMastInst_s,
+                        I2C_ALT_PERIPH_BASE,
+                        periph_SENSOR_ALT_INT,
+                        0xff,
+                        0xff,
+                        ROM_SysCtlClockGet());
+
+
+        #endif
+
+        // set optional eventBits name
+       HIDE_Fault_SetEventName(fault_SENSOR,"Sen");
+
+       // workload estimation for I2C
+       HIDE_Workload_EstimateCreate(&p_workHandle, "sI2C");
 
         #if ( setup_DEV_SUM_RECEIVS )
             HIDE_Display_InsertDrawFun(HIDE_senMesRec_DrawDisplay);
@@ -645,6 +831,7 @@ void Sensor_DrawDisplay(void)
 
         xEventGroupClearBits(gx_fault_EventGroup,fault_SENSOR);
         xEventGroupClearBits(gx_sensor_EventGroup,event_SENSOR_RECEIVED);
+        xEventGroupClearBits(gx_sensor_EventGroup,event_SENSOR_BARO_RECEIVED);
 
         // if returned zero init was not succesfull
         if(!MPU9265_Init(&s_MPU9265Inst, &i2cMastInst_s, I2C_MPU_ADRESS, Sensor_MPU9265Callback, &s_MPU9265Inst))
@@ -656,7 +843,7 @@ void Sensor_DrawDisplay(void)
                                                 event_SENSOR_RECEIVED,
                                                 pdTRUE,          // clear Bits before returning.
                                                 pdTRUE,          // wait for all Bits
-                                                SENSOR_INIT_TIMEOUT_MS / portTICK_PERIOD_MS ); // maximum wait time
+                                                SENSOR_MPU_INIT_TIMEOUT_MS / portTICK_PERIOD_MS ); // maximum wait time
 
         // unblock because of timeout, or i2cError?
         uint8_t ui8_error=(event_SENSOR_RECEIVED & x_sensorEventBits == 0) || ui8_i2cErrorFlag != 0;
@@ -671,6 +858,36 @@ void Sensor_DrawDisplay(void)
         }
         HIDE_Fault_Increment(fault_SENSOR,ui8_error);
 
+    #if ( setup_ALT_BARO )
+
+        if(!MS5611_Init(&s_MS5611Inst, &i2cAltMastInst_s, I2C_MS_ADDRESS, Sensor_MS5611Callback, &s_MS5611Inst))
+            while(1);
+
+        EventBits_t x_sensorBaroEventBits;
+        x_sensorBaroEventBits = xEventGroupWaitBits(gx_sensor_EventGroup,
+                                                event_SENSOR_BARO_RECEIVED,
+                                                pdTRUE,          // clear Bits before returning.
+                                                pdTRUE,          // wait for all Bits
+                                                SENSOR_BARO_INIT_TIMEOUT_MS / portTICK_PERIOD_MS ); // maximum wait time
+
+        // unblock because of timeout, or i2cError?
+        ui8_error=(event_SENSOR_BARO_RECEIVED & x_sensorBaroEventBits == 0) || ui8_i2cErrorFlag != 0;
+        if( ui8_error )
+        {
+           xEventGroupSetBits(gx_fault_EventGroup,fault_SENSOR);
+        }
+        else
+        {
+           xEventGroupClearBits(gx_fault_EventGroup,fault_SENSOR);
+
+           ui8_baroInitFlag = 1;
+
+           // Copy calibration values into local variable from buffer
+           MS5611_GetCalibrationValues(&s_MS5611Inst, ui16_MS5611CalVal);
+        }
+        HIDE_Fault_Increment(fault_SENSOR,ui8_error);
+    #endif
+
     }
 
     /**
@@ -678,7 +895,7 @@ void Sensor_DrawDisplay(void)
      */
     static void SensorCalibrate(void)
     {
-        float pf_sensorData[12];
+        float pf_sensorData[9];
 
         if(!MPU9265_ReadData(&s_MPU9265Inst, Sensor_MPU9265Callback, &s_MPU9265Inst))
         {
@@ -689,6 +906,7 @@ void Sensor_DrawDisplay(void)
         HIDE_Workload_EstimateStart(p_workHandle);
         EventBits_t x_sensorEventBits;
         //  Wait for sensor received event
+        xEventGroupClearBits(gx_sensor_EventGroup,event_SENSOR_RECEIVED);
         x_sensorEventBits = xEventGroupWaitBits(gx_sensor_EventGroup,
                                                    event_SENSOR_RECEIVED,
                                                    pdTRUE,          // clear Bits before returning.
@@ -716,8 +934,78 @@ void Sensor_DrawDisplay(void)
         convertMPUData(pf_sensorData);
         correctMPUOffset(pf_sensorData, 1);
 
+    #if ( setup_ALT_BARO )
+
+        float pf_sensorBaroData[2];
+        // decide which baro read seuqence should be initiated
+        // after init temp data should be ready to read
+
+        // increase the loop counter each time
+        ui8_MS5611LoopCounter++;
+
+        // Every 5th loop (~10ms) a new pressure value is read
+        if(ui8_MS5611LoopCounter == SENSOR_BARO_MEASUREMENT)
+        {
+            // reset
+            ui8_MS5611LoopCounter = 0;
+
+            if(ui8_MS5611MesCounter == SENSOR_BARO_MEASUREMENT_TEMP)
+            {
+                ui8_MS5611MesCounter = 0;
+                MS5611_ReadData(&s_MS5611Inst, Sensor_MS5611Callback, &s_MS5611Inst,
+                                                SENSOR_BARO_READ_TEMP_REQ_PRESS);
+
+                ui8_MS5611MesCounter = 0;
+            }
+            else if(ui8_MS5611MesCounter == SENSOR_BARO_MEASUREMENT_TEMP - 1)
+            {
+                MS5611_ReadData(&s_MS5611Inst, Sensor_MS5611Callback, &s_MS5611Inst,
+                                                SENSOR_BARO_READ_PRESS_REQ_TEMP);
+                ui8_MS5611MesCounter++;
+            }
+            else
+            {
+                MS5611_ReadData(&s_MS5611Inst, Sensor_MS5611Callback, &s_MS5611Inst,
+                                SENSOR_BARO_READ_PRESS_REQ_PRESS);
+                ui8_MS5611MesCounter++;
+            }
+        }
+
+        EventBits_t x_sensorBaroEventBits;
+        xEventGroupClearBits(gx_sensor_EventGroup,event_SENSOR_BARO_RECEIVED);
+        x_sensorBaroEventBits = xEventGroupWaitBits(gx_sensor_EventGroup,
+                                                event_SENSOR_BARO_RECEIVED,
+                                                pdTRUE,          // clear Bits before returning.
+                                                pdTRUE,          // wait for all Bits
+                                                SENSOR_BARO_READ_TIMEOUT_MS / portTICK_PERIOD_MS ); // maximum wait time
+
+        // unblock because of timeout, or i2cError?
+        ui8_error=(event_SENSOR_BARO_RECEIVED & x_sensorBaroEventBits == 0) || ui8_i2cErrorFlag != 0;
+        if( ui8_error )
+        {
+           xEventGroupSetBits(gx_fault_EventGroup,fault_SENSOR);
+        }
+        else
+        {
+           xEventGroupClearBits(gx_fault_EventGroup,fault_SENSOR);
+           ui8_baroInitFlag = 1;
+        }
+        HIDE_Fault_Increment(fault_SENSOR,ui8_error);
 
 
+        // get the new raw baro data and calculate is firstly started after
+        // 20 pressure and 5 temp values have been read then calculate pressure/altitude
+        if(MS5611_GetRawData(&s_MS5611Inst, &s_MS5611_rawData) &&
+                ui8_MS5611LoopCounter == SENSOR_BARO_MEASUREMENT)
+        {
+            calculatePressureAndTemp(&s_MS5611_rawData, pf_sensorBaroData);
+            // in calibration mode altitude doesn't have to be saved
+            calculateAltitude(pf_sensorBaroData, 1);
+
+        }
+
+
+    #endif
     }
     /**
      * \brief   read the sonsor and prepare data (sensor fusion).
@@ -740,6 +1028,7 @@ void Sensor_DrawDisplay(void)
         HIDE_Workload_EstimateStart(p_workHandle);
         EventBits_t x_sensorEventBits;
         //  Wait for sensor received event
+        xEventGroupClearBits(gx_sensor_EventGroup,event_SENSOR_RECEIVED);
         x_sensorEventBits = xEventGroupWaitBits(gx_sensor_EventGroup,
                                                 event_SENSOR_RECEIVED,
                                                 pdTRUE,          // clear Bits before returning.
@@ -776,6 +1065,80 @@ void Sensor_DrawDisplay(void)
         // Get Euler/Tait-Bryan angles from quaternion
         Math_QuatToEuler(gf_sensor_attitudeQuaternion, gf_sensor_fusedAngles);
         calculateAngularVelocity(gf_sensor_fusedAngles, gf_sensor_angularVelocity);
+
+    #if ( setup_ALT_BARO )
+
+        float pf_sensorBaroData[2];
+        // decide which baro read seuqence should be initiated
+        // after init temp data should be ready to read
+
+        // increase the loop counter each time
+        ui8_MS5611LoopCounter++;
+
+        // Every 5th loop (~10ms) a new pressure value is read
+        if(ui8_MS5611LoopCounter == SENSOR_BARO_MEASUREMENT)
+        {
+            // reset
+            ui8_MS5611LoopCounter = 0;
+
+            if(ui8_MS5611MesCounter == SENSOR_BARO_MEASUREMENT_TEMP)
+            {
+                ui8_MS5611MesCounter = 0;
+                MS5611_ReadData(&s_MS5611Inst, Sensor_MS5611Callback, &s_MS5611Inst,
+                                                SENSOR_BARO_READ_TEMP_REQ_PRESS);
+
+                ui8_MS5611MesCounter = 0;
+            }
+            else if(ui8_MS5611MesCounter == SENSOR_BARO_MEASUREMENT_TEMP - 1)
+            {
+                MS5611_ReadData(&s_MS5611Inst, Sensor_MS5611Callback, &s_MS5611Inst,
+                                                SENSOR_BARO_READ_PRESS_REQ_TEMP);
+                ui8_MS5611MesCounter++;
+            }
+            else
+            {
+                MS5611_ReadData(&s_MS5611Inst, Sensor_MS5611Callback, &s_MS5611Inst,
+                                SENSOR_BARO_READ_PRESS_REQ_PRESS);
+                ui8_MS5611MesCounter++;
+            }
+
+
+            volatile EventBits_t x_sensorBaroEventBits;
+
+            xEventGroupClearBits(gx_sensor_EventGroup,event_SENSOR_BARO_RECEIVED);
+            x_sensorBaroEventBits = xEventGroupWaitBits(gx_sensor_EventGroup,
+                                    event_SENSOR_BARO_RECEIVED,
+                                    pdTRUE,          // clear Bits before returning.
+                                    pdTRUE,          // wait for all Bits
+                                    SENSOR_BARO_READ_TIMEOUT_MS / portTICK_PERIOD_MS ); // maximum wait time
+
+            // unblock because of timeout, or i2cError?
+            ui8_error=(event_SENSOR_BARO_RECEIVED & x_sensorBaroEventBits == 0) || ui8_i2cErrorFlag != 0;
+            if( ui8_error )
+            {
+               xEventGroupSetBits(gx_fault_EventGroup,fault_SENSOR);
+            }
+            else
+            {
+               xEventGroupClearBits(gx_fault_EventGroup,fault_SENSOR);
+               ui8_baroInitFlag = 1;
+            }
+            HIDE_Fault_Increment(fault_SENSOR,ui8_error);
+
+            // get the new raw baro data and calculate is firstly started after
+            // 20 pressure and 5 temp values have been read then calculate pressure/altitude
+            if(MS5611_GetRawData(&s_MS5611Inst, &s_MS5611_rawData))
+            {
+                calculatePressureAndTemp(&s_MS5611_rawData, pf_sensorBaroData);
+                // in sensorReadAndFusion mode altitude is saved into global variable
+                gf_sensor_pressure = pf_sensorBaroData[P_BARO];
+                gf_sensor_altitude = calculateAltitude(pf_sensorBaroData, 0);
+            }
+
+        }
+
+
+    #endif
 
     }
 

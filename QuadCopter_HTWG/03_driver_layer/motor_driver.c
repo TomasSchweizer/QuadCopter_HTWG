@@ -39,7 +39,7 @@
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                      Local Defines                                                 */
 /* ---------------------------------------------------------------------------------------------------*/
-#define MOTOR_WRITE_TIMEOUT_MS              (10)
+#define MOTOR_WRITE_TIMEOUT_MS              (0.4)
 
 #define event_MOTOR_WRITTEN                 ( 1 << 0 )
 
@@ -256,6 +256,7 @@ void Motor_DrawDisplay(void)
 
 		// reset Motor motor fault eventBit
         xEventGroupClearBits(gx_fault_EventGroup,fault_MOTOR);
+        xEventGroupClearBits(gx_motor_EventGroup, event_MOTOR_WRITTEN);
 
 		// set optional eventBit name
 		HIDE_Fault_SetEventName(fault_MOTOR,"Mot");
@@ -308,6 +309,7 @@ void Motor_DrawDisplay(void)
 
 	    EventBits_t x_motorEventBits;
         //  Wait for sensor received event
+	    xEventGroupClearBits(gx_motor_EventGroup,event_MOTOR_WRITTEN);
         x_motorEventBits = xEventGroupWaitBits(gx_motor_EventGroup,
                                               event_MOTOR_WRITTEN,
                                               pdTRUE,          // clear Bits before returning.
@@ -315,8 +317,8 @@ void Motor_DrawDisplay(void)
                                               MOTOR_WRITE_TIMEOUT_MS / portTICK_PERIOD_MS ); // maximum wait time
 
         // unblock because of timeout
-        uint8_t ui8_error=(event_MOTOR_WRITTEN & x_motorEventBits == 0);
-        if( ui8_error || gui32_motor_fault)
+        uint8_t ui8_error=(event_MOTOR_WRITTEN & x_motorEventBits == 0) || gui32_motor_fault;
+        if( ui8_error )
         {
            // if any motor has a fault, set EventBit for motor fault
            xEventGroupSetBits(gx_fault_EventGroup,fault_MOTOR);
@@ -388,7 +390,7 @@ void Motor_DrawDisplay(void)
                 ui8_i2cMotorState = MOTOR_READY;
                 HIDE_Workload_EstimateStop(p_workHandle);
 
-            // fire eventBit to notify Sensor Read has finished
+            // fire eventBit to notify motor write has finished
             BaseType_t xHigherPriorityTaskWoken = pdFALSE;
             if(pdFAIL==xEventGroupSetBitsFromISR(gx_motor_EventGroup, event_MOTOR_WRITTEN, &xHigherPriorityTaskWoken))
                 while(1);// you will come here, when configTIMER_QUEUE_LENGTH is full

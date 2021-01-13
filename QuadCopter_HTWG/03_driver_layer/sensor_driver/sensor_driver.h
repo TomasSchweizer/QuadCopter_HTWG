@@ -33,6 +33,7 @@
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                      Global Variables                                              */
 /* ---------------------------------------------------------------------------------------------------*/
+//extern volatile EventGroupHandle_t gx_sensor_EventGroup;
 
 extern volatile float gf_sensor_attitudeQuaternion[4];
 extern volatile float gf_sensor_dotAttitudeQuaternion[4];

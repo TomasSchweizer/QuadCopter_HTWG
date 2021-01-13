@@ -46,6 +46,11 @@
 
 	#define periph_SENSOR_INT 					INT_I2C1 		// motor driver can share I2C with sensor
 
+    #if ( setup_ALT_BARO || setup_ALT_LIDAR )
+
+        #define periph_SENSOR_ALT_INT           INT_I2C2
+    #endif
+
 #endif
 
 //

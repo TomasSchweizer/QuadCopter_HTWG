@@ -70,6 +70,7 @@ extern void xPortSysTickHandler(void);
 //
 #define HANDLER_GPIO_PORT_E					IntDefaultHandler
 #define HANDLER_I2C1_MASTER_AND_SLAVE		IntDefaultHandler
+#define HANDLER_I2C2_MASTER_AND_SLAVE       IntDefaultHandler
 #define HANDLER_TIMER2_A                    IntDefaultHandler
 #define HANDLER_USB0                        IntDefaultHandler
 
@@ -88,7 +89,13 @@ extern void xPortSysTickHandler(void);
 #if   ( periph_SENSOR_INT == INT_I2C1 )
 	extern void Sensor_I2CIntHandler(void);
 	#undef  HANDLER_I2C1_MASTER_AND_SLAVE
-	#define HANDLER_I2C1_MASTER_AND_SLAVE 		Sensor_I2CIntHandler
+	#define HANDLER_I2C1_MASTER_AND_SLAVE    		Sensor_I2CIntHandler
+
+    #if ( setup_ALT_BARO || setup_ALT_LIDAR)
+	    extern void Sensor_Alt_I2CIntHandler(void);
+        #undef  HANDLER_I2C2_MASTER_AND_SLAVE
+        #define HANDLER_I2C2_MASTER_AND_SLAVE       Sensor_Alt_I2CIntHandler
+    #endif
 #endif
 
 //
@@ -211,7 +218,7 @@ void (* const g_pfnVectors[])(void) =
     0,                                      // Reserved
     0,                                      // Reserved
     0,                                      // Reserved
-    IntDefaultHandler,                      // I2C2 Master and Slave
+    HANDLER_I2C2_MASTER_AND_SLAVE,          // I2C2 Master and Slave
     IntDefaultHandler,                      // I2C3 Master and Slave
     IntDefaultHandler,                      // Timer 4 subtimer A
     IntDefaultHandler,                      // Timer 4 subtimer B

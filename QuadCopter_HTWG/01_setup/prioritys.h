@@ -43,6 +43,7 @@
 #define priority_DEBUGGER_ISR			( 6 << 5 )
 #define priority_USB_ISR                ( 6 << 5 )
 #define priority_SENSOR_ISR      		( 3 << 5 )
+#define priority_SENSOR_ALT_ISR         ( 3 << 5 )
 #define priority_MOTOR_ISR				( 5 << 5 )
 
 // all ISRs with a priority number >= priority_MAX_API_CALL_INTERRUPT

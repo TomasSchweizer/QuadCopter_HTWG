@@ -84,6 +84,7 @@ static void    StateResting(void);
 // used global variables
 extern volatile uint32_t 		    gui32_receiver_flightStabInput;
 extern volatile EventGroupHandle_t  gx_fault_EventGroup;
+//extern volatile EventGroupHandle_t  gx_sensor_EventGroup;
 
 
 /**
@@ -190,6 +191,8 @@ static void FlightTask(void *pvParameters)
 {
 
 	Motor_InitMotor();
+	// Delay 1ms just for safety that motor is initalized before sensors get initialized not necessary but nicer
+	vTaskDelay( 1/ portTICK_PERIOD_MS );
 	Sensor_InitSensor();
 
 
@@ -374,9 +377,11 @@ static void StateResting(void)
         //TODO delete later besides Sensor_ReadFusion just for pID lib tests
         //ReceiverTask_GetSetPoints(&gf_flight_setPoint[0]);
         Sensor_ReadAndFusion();
+
         //Control_FlightStabilisation();
         //Control_Mixer();
     }
+    vTaskDelay(0.4 / portTICK_PERIOD_MS);
 	Motor_StopAll();
 }
 

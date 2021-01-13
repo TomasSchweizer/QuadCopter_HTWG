@@ -89,7 +89,7 @@ static void MPU9265Callback(void *p_MPU9265CallbackData, uint_fast8_t ui8_i2cSta
 
     MPU9265_s *ps_inst;
 
-    // Convert the instance data into a pointer to a tMPU9150 structure
+    // Convert the instance data into a pointer to a MPU9265 structure
     ps_inst = p_MPU9265CallbackData;
 
     // If the I2C master driver encountered a failure, force the state machine
@@ -104,7 +104,7 @@ static void MPU9265Callback(void *p_MPU9265CallbackData, uint_fast8_t ui8_i2cSta
         ps_inst->ui8_MPU9265State = MPU9265_STATE_IDLE;
     }
 
-    // Determine the current state of the MPU9150 state machine.
+    // Determine the current state of the MPU9265 state machine.
     switch(ps_inst->ui8_MPU9265State)
     {
 
@@ -343,6 +343,7 @@ uint8_t MPU9265_ReadData(MPU9265_s *ps_inst, tSensorCallback *fp_MPU9265Callback
     {
         // i2c failed return 0 and move back to IDLE state
         ps_inst->ui8_MPU9265State = MPU9265_STATE_IDLE;
+        return(0);
     }
 
     // i2c was successful
@@ -501,10 +502,6 @@ void  MPU9265_AK8963_GetRawData(MPU9265_s *ps_inst, MPU9265_AK8963_rawData_s *s_
 
 
 }
-
-
-
-
 
 //=====================================================================================================
 // End of file
