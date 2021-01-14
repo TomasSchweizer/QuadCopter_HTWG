@@ -71,7 +71,9 @@ static void MS5611Callback(void *p_MS5611CallbackData, uint_fast8_t ui8_i2cState
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                      Local Variables                                               */
 /* ---------------------------------------------------------------------------------------------------*/
+
 static uint8_t ui8_MS5611InitSequenceCounter = 0;
+
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                      Procedure Definitions                                         */
 /* ---------------------------------------------------------------------------------------------------*/
@@ -282,7 +284,6 @@ static void MS5611Callback(void *p_MS5611CallbackData, uint_fast8_t ui8_i2cState
 
 /**
  * \brief   Initializes the MS5611 struct and requests a reset
- *
  */
 uint8_t MS5611_Init(MS5611_s *ps_ms_inst, tI2CMInstance *ps_I2CMInst, uint8_t ui8_MS5611Address,
                            tSensorCallback *fp_MS5611Callback, void *p_MS5611CallbackData)
@@ -454,18 +455,6 @@ uint8_t MS5611_GetRawData(MS5611_s *ps_ms_inst, MS5611_rawData_s *s_rawData)
 }
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+//=====================================================================================================
+// End of file
+//=====================================================================================================

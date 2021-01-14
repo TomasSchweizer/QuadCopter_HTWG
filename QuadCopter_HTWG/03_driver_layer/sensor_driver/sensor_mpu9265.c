@@ -483,6 +483,10 @@ uint8_t AK8963_ReadData(AK8963_s *ps_ak_inst, tSensorCallback *fp_AK8963Callback
 
 }
 
+/**
+ * \brief    Copies the data from the read buffer into a variable
+ *
+ */
 void  MPU9265_AK8963_GetRawData(MPU9265_s *ps_inst, MPU9265_AK8963_rawData_s *s_rawData)
 {
     // Copy accel data

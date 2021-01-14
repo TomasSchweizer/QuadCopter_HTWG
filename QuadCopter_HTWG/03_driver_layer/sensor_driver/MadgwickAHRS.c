@@ -79,7 +79,7 @@ static uint16_t ui16_counterStartUpConvergence = 0;
  */
 void MadgwickAHRSupdate(float ax, float ay, float az, float gx, float gy, float gz, float mx, float my, float mz, volatile float q[4], volatile float qDot[4], float dt)
 {
-   float beta;
+   float beta = BETA;
 
    if(ui16_counterStartUpConvergence < 1000)
    {

@@ -381,7 +381,6 @@ static void StateResting(void)
         //Control_FlightStabilisation();
         //Control_Mixer();
     }
-    vTaskDelay(0.4 / portTICK_PERIOD_MS);
 	Motor_StopAll();
 }
 

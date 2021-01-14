@@ -38,8 +38,8 @@
 
 #if setup_QC_ALTITUDE_HOLD
 
-    #define setup_ALT_BARO              ( 1 )
-    #define setup_ALT_LIDAR             ( 1 )
+    #define setup_ALT_BARO              ( 0 )
+    #define setup_ALT_LIDAR             ( 0 )
 
 #endif
 /* ------------------------------------------------------------ */

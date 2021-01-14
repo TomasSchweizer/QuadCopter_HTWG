@@ -106,8 +106,7 @@ extern uint8_t MPU9265_ReadData(MPU9265_s *ps_inst, tSensorCallback *fp_MPU9265C
 extern void  MPU9265_AK8963_GetRawData(MPU9265_s *ps_inst, MPU9265_AK8963_rawData_s *s_rawData);
 
 #endif /* _SENSOR_MPU925X_H_ */
+
 //=====================================================================================================
 // End of file
 //=====================================================================================================
-
-

@@ -1,67 +1,60 @@
 //=====================================================================================================
-// @file sensor_ms5611.h
+// @file LidarLitev3HP_register.h
 //=====================================================================================================
 //
-// @brief API to interact with the sensor ms5611.
+// @brief List of used registers from LidarLite_v3HP
 //
 // Date                 Author                      Notes
-// @date 06/12/2020     @author Tomas Schweizer     Implementation
+// @date 24/12/2020     @author Tomas Schweizer     Implementation
 //
 // Source:
-// YMCA-Quadcopter: http://www.brokking.net/ymfc-32_auto_main.html
+// Data sheet LidarLite_v3HP
 //
 //=====================================================================================================
 
-#ifndef SENSOR_MS5611_H_
-#define SENSOR_MS5611_H_
+#ifndef LIDARLITEV3HP_REGISTER_H_
+#define LIDARLITEV3HP_REGISTER_H_
+
 
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                     Include File Definitions                                       */
 /* ---------------------------------------------------------------------------------------------------*/
-#include <stdint.h>
-#include "sensorlib/i2cm_drv.h"
 
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                      Defines                                                       */
 /* ---------------------------------------------------------------------------------------------------*/
+// 2 i2c addresses one for write and  one for read of the LidarLite_v3HP
+#define LIDARLITEV3HP_ADDRESS                       0x62
+
+// control registers
+#define LIDARLITEv3HP_ACQ_COMMAND                   0x00
+#define LIDARLITEv3HP_STATUS                        0x01
+#define LIDARLITEv3HP_SIG_COUNT_VAL                 0x02
+#define LIDARLITEv3HP_ACQ_CONFIG_REG                0x04
+#define LIDARLITEv3HP_REF_COUNT_VAL                 0x12
+#define LIDARLITEv3HP_THRESHOLD_BYPASS              0x1C
+// read registers
+#define LIDARLITEv3HP_DISTANCE_HIGH_BYTE            0x0f
+#define LIDARLITEv3HP_DISTANCE_LOW_BYTE             0x10
+
+// bit values for balanced mode !!! is used !!!
+#define LIDARLITEv3HP_SIGCOUNTVAL_BALANCED          0x80
+#define LIDARLITEv3HP_ACQCONFIGREG_BALANCED         0x08
+#define LIDARLITEv3HP_REFCOUNTVAL_BALANCED          0x05
+#define LIDARLITEv3HP_THRESHOLDBYPASS_BALANCED      0x00
+
+// bit for short range high speed
+#define LIDARLITEv3HP_SIGCOUNTVAL_SPEED             0x1D
+#define LIDARLITEv3HP_ACQCONFIGREG_SPEED            0x08
+#define LIDARLITEv3HP_REFCOUNTVAL_SPEED             0x03
+#define LIDARLITEv3HP_THRESHOLDBYPASS_SPEED         0x00
+
+// bit to initiate a measurement
+#define LIDARLITEv3HP_ACQ_COMMAND_INIT_MEAS         0x01
 
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                      Type Definitions                                              */
 /* ---------------------------------------------------------------------------------------------------*/
-// Struct for MS5611 raw data
-typedef struct
-{
-    uint32_t ui32_baroT;
-    uint32_t ui32_baroP;
-
-} MS5611_rawData_s;
-
-// Struct for MS5611 instance
-typedef struct
-{
-    // I2c master instance
-    tI2CMInstance *ps_i2cMastInst;
-
-    // I2c device address
-    uint8_t ui8_MS5611Address;
-
-    // State of the MS5611
-    uint8_t ui8_MS5611State;
-
-    // PROM calibration values
-    uint8_t pui8_MS5611PROMValues[12];
-
-    uint8_t pui8_MS5611ReadBuffer[8];
-
-    uint8_t pui8_MS5611WriteBuffer[8];
-
-    uint8_t ui8_MS5611DataType;
-
-    // pointer to the function which is called when request is finished
-    tSensorCallback *fp_MS5611Callback;
-
-    void *p_MS5611CallbackData;
-} MS5611_s;
 
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                      Global Variables                                              */
@@ -70,16 +63,10 @@ typedef struct
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                      API Procedure Definitions                                     */
 /* ---------------------------------------------------------------------------------------------------*/
-extern uint8_t MS5611_Init(MS5611_s *ps_ms_inst, tI2CMInstance *ps_I2CMInst, uint8_t ui8_MS5611Address,
-                           tSensorCallback *fp_MS5611Callback, void *p_MS5611CallbackData);
-extern uint8_t MS5611_ReadData(MS5611_s *ps_ms_inst, tSensorCallback *fp_MS5611Callback,
-                               void *p_MS5611CallbackData, uint8_t ui8_dataChooser);
-extern void MS5611_GetCalibrationValues(MS5611_s *ps_ms_inst, uint16_t *ui16_baroCalValues);
-extern uint8_t MS5611_GetRawData(MS5611_s *ps_ms_inst, MS5611_rawData_s *s_rawData);
-
-#endif /* SENSOR_MS5611_H_ */
+#endif /* LIDARLITEV3HP_REGISTER_H_ */
 
 //=====================================================================================================
 // End of file
 //=====================================================================================================
+
 

@@ -40,7 +40,8 @@ extern volatile float gf_sensor_dotAttitudeQuaternion[4];
 extern float gf_sensor_fusedAngles[3];
 extern float gf_sensor_angularVelocity[3];
 extern float gf_sensor_pressure;
-extern float gf_sensor_altitude;
+extern float gf_sensor_baroAltitude;
+extern float gf_sensor_lidarAltitude;
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                      API Procedure Definitions                                     */
 /* ---------------------------------------------------------------------------------------------------*/
