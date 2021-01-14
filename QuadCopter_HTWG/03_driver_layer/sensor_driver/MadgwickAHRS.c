@@ -4,10 +4,10 @@
 //
 // @brief Implementation of Madgwick's AHRS algorithm.
 //
-// Date			        Author                      Notes
-// @date 29/09/2011	    @author SOH Madgwick        Initial release
-// @date 02/10/2011	    @author SOH Madgwick	    Optimised for reduced CPU load
-// @date 19/02/2012	    @author SOH Madgwick	    Magnetometer measurement is normalised
+// Date                 Author                      Notes
+// @date 29/09/2011     @author SOH Madgwick        Initial release
+// @date 02/10/2011     @author SOH Madgwick        Optimised for reduced CPU load
+// @date 19/02/2012     @author SOH Madgwick        Magnetometer measurement is normalised
 // @date 06/12/2020     @author Tomas Schweizer     Overall changes to fit to application
 //
 // Source:
@@ -79,7 +79,7 @@ static uint16_t ui16_counterStartUpConvergence = 0;
  */
 void MadgwickAHRSupdate(float ax, float ay, float az, float gx, float gy, float gz, float mx, float my, float mz, volatile float q[4], volatile float qDot[4], float dt)
 {
-   float beta = BETA;
+   float beta;
 
    if(ui16_counterStartUpConvergence < 1000)
    {

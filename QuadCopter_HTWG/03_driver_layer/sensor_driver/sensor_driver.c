@@ -302,6 +302,7 @@ void Sensor_DrawDisplay(void)
 
 
 
+
     /*------------------------------------------------------------------------------------------------*/
     /*                                     Local defines i2c Mode                                     */
     /* -----------------------------------------------------------------------------------------------*/
@@ -903,6 +904,7 @@ void Sensor_DrawDisplay(void)
 
         EventBits_t x_sensorEventBits;
         //  Wait for sensor received event
+        xEventGroupClearBits(gx_sensor_EventGroup, event_SENSOR_RECEIVED);
         x_sensorEventBits = xEventGroupWaitBits(gx_sensor_EventGroup,
                                                 event_SENSOR_RECEIVED,
                                                 pdTRUE,          // clear Bits before returning.
@@ -1006,7 +1008,7 @@ void Sensor_DrawDisplay(void)
         HIDE_Workload_EstimateStart(p_workHandle);
         EventBits_t x_sensorEventBits;
         //  Wait for sensor received event
-        xEventGroupClearBits(gx_sensor_EventGroup,event_SENSOR_RECEIVED);
+       //xEventGroupClearBits(gx_sensor_EventGroup,event_SENSOR_RECEIVED);
         x_sensorEventBits = xEventGroupWaitBits(gx_sensor_EventGroup,
                                                    event_SENSOR_RECEIVED,
                                                    pdTRUE,          // clear Bits before returning.
