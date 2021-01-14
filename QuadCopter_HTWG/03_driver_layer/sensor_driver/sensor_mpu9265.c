@@ -19,6 +19,7 @@
 #include <stdint.h>
 
 #include "sensorlib/i2cm_drv.h"
+#include "busy_delay.h"
 
 #include "mpu9265_registers.h"
 #include "ak8963_registers.h"
@@ -124,24 +125,29 @@ static void MPU9265Callback(void *p_MPU9265CallbackData, uint_fast8_t ui8_i2cSta
         // Status register was read, check if reset is done before proceeding.
         case MPU9265_STATE_INIT_RESET_WAIT:
         {
+            // TODO change text
             // Check the value read back from status to determine if device
             // is still in reset or if it is ready.  Reset state for this
             // register is 0x01. Device may also respond with an address NACK during very early stages of the
             // its internal reset.  Keep polling until we verify device is ready.
-            if((ps_inst->pui8_MPU9265ReadBuffer[0] != 0x01) ||
-                    (ui8_i2cState == I2CM_STATUS_ADDR_NACK))
-            {
-                // Device still in reset so begin polling this register.
-                ps_inst->pui8_MPU9265WriteBuffer[0] = MPU9265_PWR_MGMT_1;
-                I2CMRead(ps_inst->ps_i2cMastInst, ps_inst->ui8_MPU9265Address,
-                         ps_inst->pui8_MPU9265WriteBuffer, 1,
-                         ps_inst->pui8_MPU9265ReadBuffer, 1, MPU9265Callback, ps_inst);
+//            if((ps_inst->pui8_MPU9265ReadBuffer[0] != 0x01) ||
+//                    (ui8_i2cState == I2CM_STATUS_ADDR_NACK))
+//            {
+//                // Device still in reset so begin polling this register.
+//                ps_inst->pui8_MPU9265WriteBuffer[0] = MPU9265_PWR_MGMT_1;
+//
+//                I2CMRead(ps_inst->ps_i2cMastInst, ps_inst->ui8_MPU9265Address,
+//                         ps_inst->pui8_MPU9265WriteBuffer, 1,
+//                         ps_inst->pui8_MPU9265ReadBuffer, 1, MPU9265Callback, ps_inst);
+//                // Stay in the state for polling effect
+//                ps_inst->ui8_MPU9265State = MPU9265_STATE_INIT_RESET_WAIT;
+//            }
+//            else
+//            {
 
-                // Stay in the state for polling effect
-                ps_inst->ui8_MPU9265State = MPU9265_STATE_INIT_RESET_WAIT;
-            }
-            else
-            {
+
+                BusyDelay_Ms(1);
+
                 // Device finished reset active PWR MODE 1
                 ps_inst->pui8_MPU9265WriteBuffer[0] = MPU9265_PWR_MGMT_1;
                 ps_inst->pui8_MPU9265WriteBuffer[1] = MPU9265_PWR_MGMT_1_INT_20MHZ_CLOCK;
@@ -152,7 +158,7 @@ static void MPU9265Callback(void *p_MPU9265CallbackData, uint_fast8_t ui8_i2cSta
                 // Update state to show we are modifing user control and
                 // power management 1 regs.
                 ps_inst->ui8_MPU9265State = MPU9265_STATE_INIT_PWR_MGMT;
-            }
+            //}
 
             break;
         }
