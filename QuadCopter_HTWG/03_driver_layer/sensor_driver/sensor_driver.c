@@ -136,6 +136,9 @@ volatile float gf_sensor_dotAttitudeQuaternion[4];
 float gf_sensor_fusedAngles[3];
 float gf_sensor_angularVelocity[3];
 
+// TODO just test
+int16_t gf_sensor_raw[9];
+
 
 float gf_sensor_pressure; // TODO maybe later just altitude global
 float gf_sensor_baroAltitude;
@@ -166,10 +169,9 @@ static int32_t i32_stateTime = CALIBRATE_BEFORE_FIRST_START;
 
     void HIDE_Sensor_SendDataOverUSB(void)
     {
-        gf_usb_debug[0] = gf_sensor_attitudeQuaternion[0];
-        gf_usb_debug[1] = gf_sensor_attitudeQuaternion[1];
-        gf_usb_debug[2] = gf_sensor_attitudeQuaternion[2];
-        gf_usb_debug[3] = gf_sensor_attitudeQuaternion[3];
+
+
+
 
         HIDE_Debug_USB_InterfaceSend(gf_usb_debug, sizeof(gf_usb_debug)/ sizeof(gf_usb_debug[0]), debug_FLOAT);
     }
@@ -435,31 +437,6 @@ void Sensor_DrawDisplay(void)
 
     #endif
 
-
-
-//  TODO check which variables are needed for barometer
-//    // Counter variables for Barometer (MS5611) loop
-//    static uint8_t ui8_i2cPressCounter = 0;
-//    static uint8_t ui8_i2cTempCounter = 0;
-//
-//    // variables for temp from barometer
-//    static uint32_t ui32_tempRotMem[5];
-//    static uint8_t ui8_rotMemCounter;
-//    static uint32_t ui32_tempSum;
-//
-//    // variables for pressure from barometer
-//    static uint32_t ui32_pressRotMem[20];
-//    static uint8_t ui8_pressMemCounter;
-//    static uint32_t ui32_pressSum;
-//    static float f_pressureBase = 97500; // Set to a typical value for around 300m to get faster filter convergence
-//
-//    //flag new pressure measurement is there
-//    static uint8_t ui8_newPressValue = 0;
-//
-//    static float f_pressureReference = 101325.0; // pressure at sea level gets changed in calibrate to local pressure on ground
-//
-//    static rawData_s s_rawData;
-//    static baroData_s s_baroData;
 
     /* -----------------------------------------------------------------------------------------------*/
     /*                                      Procedure Definitions i2c mode                            */
@@ -1051,11 +1028,29 @@ void Sensor_DrawDisplay(void)
 
         // Get MPU data and convert it
         MPU9265_AK8963_GetRawData(&s_MPU9265Inst, &s_MPU9265_AK8963_rawData);
+
+//        gf_sensor_raw[0] = s_MPU9265_AK8963_rawData.i16_accX;
+//        gf_sensor_raw[1] = s_MPU9265_AK8963_rawData.i16_accY;
+//        gf_sensor_raw[2] = s_MPU9265_AK8963_rawData.i16_accZ;
+//        gf_sensor_raw[3] = s_MPU9265_AK8963_rawData.i16_gyroX;
+//        gf_sensor_raw[4] = s_MPU9265_AK8963_rawData.i16_gyroY;
+//        gf_sensor_raw[5] = s_MPU9265_AK8963_rawData.i16_gyroZ;
+//        gf_sensor_raw[6] = s_MPU9265_AK8963_rawData.i16_magX;
+//        gf_sensor_raw[7] = s_MPU9265_AK8963_rawData.i16_magY;
+//        gf_sensor_raw[8] = s_MPU9265_AK8963_rawData.i16_magZ;
+
+
         MPUrawData2Float(pf_sensorData);
         // Correct MPU data
         MPUAxis2QCAxis(pf_sensorData);
         convertMPUData(pf_sensorData);
         correctMPUOffset(pf_sensorData, 1);
+
+
+        // TODO just test sensor data
+
+
+
 
     #if ( setup_ALT_BARO )
 
@@ -1203,11 +1198,35 @@ void Sensor_DrawDisplay(void)
 
         // Get MPU data and convert it
         MPU9265_AK8963_GetRawData(&s_MPU9265Inst, &s_MPU9265_AK8963_rawData);
+
+//        // TODO delete later jus test
+//        gf_sensor_raw[0] = s_MPU9265_AK8963_rawData.i16_accX;
+//        gf_sensor_raw[1] = s_MPU9265_AK8963_rawData.i16_accY;
+//        gf_sensor_raw[2] = s_MPU9265_AK8963_rawData.i16_accZ;
+//        gf_sensor_raw[3] = s_MPU9265_AK8963_rawData.i16_gyroX;
+//        gf_sensor_raw[4] = s_MPU9265_AK8963_rawData.i16_gyroY;
+//        gf_sensor_raw[5] = s_MPU9265_AK8963_rawData.i16_gyroZ;
+//        gf_sensor_raw[6] = s_MPU9265_AK8963_rawData.i16_magX;
+//        gf_sensor_raw[7] = s_MPU9265_AK8963_rawData.i16_magY;
+//        gf_sensor_raw[8] = s_MPU9265_AK8963_rawData.i16_magZ;
+
         MPUrawData2Float(pf_sensorData);
         // Correct MPU data
         MPUAxis2QCAxis(pf_sensorData);
         convertMPUData(pf_sensorData);
         correctMPUOffset(pf_sensorData, 0);
+
+        // TODO delete later just test
+        gf_usb_debug[0] = pf_sensorData[0];
+        gf_usb_debug[1] = pf_sensorData[1];
+        gf_usb_debug[2] = pf_sensorData[2];
+        gf_usb_debug[3] = pf_sensorData[3];
+        gf_usb_debug[4] = pf_sensorData[4];
+        gf_usb_debug[5] = pf_sensorData[5];
+        gf_usb_debug[6] = pf_sensorData[6];
+        gf_usb_debug[7] = pf_sensorData[7];
+        gf_usb_debug[8] = pf_sensorData[8];
+
 
         // Get attitude quaternion via sensor fusion from MPU data
         MadgwickAHRSupdate(pf_sensorData[X_ACC], pf_sensorData[Y_ACC], pf_sensorData[Z_ACC],

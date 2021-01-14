@@ -339,7 +339,7 @@ uint8_t MPU9265_ReadData(MPU9265_s *ps_inst, tSensorCallback *fp_MPU9265Callback
     ps_inst->pui8_MPU9265WriteBuffer[0] = MPU9265_ACCEL_XOUT_H;
     if(I2CMRead(ps_inst->ps_i2cMastInst, ps_inst->ui8_MPU9265Address,
                 ps_inst->pui8_MPU9265WriteBuffer, 1,
-                ps_inst->pui8_MPU9265ReadBuffer, 16, MPU9265Callback, ps_inst) == 0)
+                ps_inst->pui8_MPU9265ReadBuffer, 14, MPU9265Callback, ps_inst) == 0)
     {
         // i2c failed return 0 and move back to IDLE state
         ps_inst->ui8_MPU9265State = MPU9265_STATE_IDLE;
