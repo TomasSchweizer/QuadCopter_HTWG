@@ -31,6 +31,7 @@
 #define configUSE_16_BIT_TICKS              		0			// 0 -> uint32_t, 1 -> uint16_t    for time measurement
 #define configIDLE_SHOULD_YIELD             		0			// This parameter controls the behaviour of tasks at the idle priority.
 #define configMAX_PRIORITIES						priority_COUNT
+#define configSUPPORT_DYNAMIC_ALLOCATION            1
 #define configUSE_IDLE_HOOK             			(setup_DEV_WORKLOAD_STATISTIC || setup_DEV_WORKLOAD_LED ) 			// function that is called during each cycle of the idle task -> common to use the idle hook function to place the micro-controller CPU into a power saving mode.
 #if   ( setup_DEV_STACK_OVERFLOW )
 	#define configCHECK_FOR_STACK_OVERFLOW  		2			// 2 -> RTOS Kernel will colour the Stack and look at every context switch if the "colour has changed" -> vApplicationStackOverflowHook will be called  (this should only be used for development)

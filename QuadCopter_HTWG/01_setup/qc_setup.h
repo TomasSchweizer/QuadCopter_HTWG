@@ -29,7 +29,7 @@
 	#define setup_DEV_SUM_FAULTS		( 1 )					// every fault   eventBit gets a name & every time a fault   event happens, increment a counter (gp_fault_coundEdges)
 	#define setup_DEV_SUM_RECEIVS		( 1 )					// every receive eventBit gets a name & every time a receive event happens, increment a counter
 	#define setup_DEV_DISPLAY			( 1 )					// show workloads, sumFaults, sumReceivs on Display (but only when the desired setup_DEV=1)
-	#define setup_DEV_PID_TUNE			( 1 )					// read debug interface for PID values (this can crash with write commands on the trace interface)
+	#define setup_DEV_PID_TUNE			( 0 )					// read debug interface for PID values (this can crash with write commands on the trace interface)
 	#define setup_DEV_DEBUG_PINS		( 1 )					// enable debug pins
     #define setup_DEV_DEBUG_USB         ( 1 )                   // enable debug options over USB
 	#define setup_DEV_COMMANDS			( 0 )					// enable HIDE-function macros to insert into the command Queue Task
@@ -38,8 +38,8 @@
 
 #if setup_QC_ALTITUDE_HOLD
 
-    #define setup_ALT_BARO              ( 0 )
-    #define setup_ALT_LIDAR             ( 0 )
+    #define setup_ALT_BARO              ( 1 )
+    #define setup_ALT_LIDAR             ( 1 )
 
 #endif
 /* ------------------------------------------------------------ */

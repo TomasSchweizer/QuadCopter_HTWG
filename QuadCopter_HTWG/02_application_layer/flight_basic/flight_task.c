@@ -189,7 +189,8 @@ uint32_t FlightTask_Init(void)
  */
 static void FlightTask(void *pvParameters)
 {
-
+    // That the ecs can get powerd up
+    vTaskDelay( 50 / portTICK_PERIOD_MS );
 	Motor_InitMotor();
 	// Delay 1ms just for safety that motor is initalized before sensors get initialized not necessary but nicer
 	vTaskDelay( 1/ portTICK_PERIOD_MS );
@@ -381,6 +382,7 @@ static void StateResting(void)
         //Control_FlightStabilisation();
         //Control_Mixer();
     }
+
 	Motor_StopAll();
 }
 

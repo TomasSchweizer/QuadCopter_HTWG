@@ -51,8 +51,11 @@
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                      Local Defines                                                 */
 /* ---------------------------------------------------------------------------------------------------*/
-#define SENSOR_MPU_INIT_TIMEOUT_MS                  ( 3 )
+#define SENSOR_MPU_INIT_TIMEOUT_MS                  ( 5 )
 #define SENSOR_READ_TIMEOUT_MS		                ( 1.1 )
+/** \brief  sensor eventBit*/
+#define event_SENSOR_BIT_COUNT                      ( 3 )
+#define event_SENSOR_RECEIVED                       ( 1 << 0 )
 
 #define CALIBRATE_MIN_TIME_MS                       ( 5000 ) //###5000
 #define CALIBRATE_BEFORE_FIRST_START                ( -2 )
@@ -62,13 +65,13 @@
 
 #define dt 0.002f
 
-/** \brief  sensor eventBit*/
-#define event_SENSOR_BIT_COUNT                      ( 3 )
-#define event_SENSOR_RECEIVED                       ( 1 << 0 )
+
 
 #if (setup_ALT_BARO)
     #define SENSOR_BARO_INIT_TIMEOUT_MS             ( 3000 ) // TODO test but takes quit some time
-    #define SENSOR_BARO_READ_TIMEOUT_MS             ( 1 )
+    // event bit for barometer
+    #define event_SENSOR_BARO_RECEIVED              ( 1 << 1 )
+
 
     // defines for read timing barometer
     #define SENSOR_BARO_MEASUREMENT                 ( 5 )   // every 5th loop read data
@@ -77,16 +80,16 @@
     #define SENSOR_BARO_READ_PRESS_REQ_TEMP         ( 7 )
     #define SENSOR_BARO_READ_PRESS_REQ_PRESS        ( 8 )
 
-    // event bit for barometer
-    #define event_SENSOR_BARO_RECEIVED              ( 1 << 1 )
+
 #endif
 
 #if(setup_ALT_LIDAR)
-    #define SENSOR_LIDAR_INIT_TIMEOUT_MS            ( 1 )
-    #define SENSOR_LIDAR_READ_TIMEOUT_MS            ( 0.4 )
-
+    #define SENSOR_LIDAR_INIT_TIMEOUT_MS            ( 5 )
     // event bit for lidar
-    #define event_SENSOR_LIDAR_RECEIVED             (2 << 1)
+    #define event_SENSOR_LIDAR_RECEIVED             (1 << 2)
+
+    #define SENSOR_LIDAR_MEASUREMENT                ( 2 )
+
 #endif
 
 
@@ -117,6 +120,8 @@ enum sensorBaro_e{
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                      Forward Declarations                                          */
 /* ---------------------------------------------------------------------------------------------------*/
+uint8_t blockTaskTillEventBitIsSet(uint32_t ui32_eventBits, uint32_t ui32_eventTimeout_Ms);
+
 
 #if ( setup_DEV_SUM_RECEIVS )
     extern void HIDE_senMesRec_SetEventName(uint32_t ui32_eventBit,const char* pc_name);
@@ -148,11 +153,11 @@ float gf_sensor_lidarAltitude;
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                      Local Variables                                               */
 /* ---------------------------------------------------------------------------------------------------*/
-volatile EventGroupHandle_t gx_sensor_EventGroup = 0;
+volatile EventGroupHandle_t gx_sensor_EventGroup;
 // variable to check i2c workload
 static workload_handle_p p_workHandle;
 // count received sensor measurements
-countEdges_handle_p p_senMesRec_countEdges;
+volatile countEdges_handle_p p_senMesRec_countEdges;
 
 static int32_t i32_stateTime = CALIBRATE_BEFORE_FIRST_START;
 
@@ -171,7 +176,8 @@ static int32_t i32_stateTime = CALIBRATE_BEFORE_FIRST_START;
     {
 
 
-
+        gf_usb_debug[0] = gf_sensor_baroAltitude;
+        gf_usb_debug[1] = gf_sensor_lidarAltitude;
 
         HIDE_Debug_USB_InterfaceSend(gf_usb_debug, sizeof(gf_usb_debug)/ sizeof(gf_usb_debug[0]), debug_FLOAT);
     }
@@ -257,15 +263,66 @@ void Sensor_DrawDisplay(void)
         u8g_DrawStr(&gs_display,72+16,  yOffset + 0, u8g_u8toa(yaw_value, 3));
     }
 
-    #if ( setup_ALT_BARO )
+    #if ( setup_ALT_BARO || setup_ALT_LIDAR )
 
 
-    u8g_DrawStr(&gs_display, 58, 20,"Al");
-    u8g_DrawStr(&gs_display, 70, 20, u8g_u16toa((uint16_t)gf_sensor_baroAltitude,4));
-    u8g_DrawStr(&gs_display, 58, 20,"Al");
-    u8g_DrawStr(&gs_display, 70, 20, u8g_u16toa((uint16_t)gf_sensor_lidarAltitude,4));
+    u8g_DrawStr(&gs_display, 58, 32,"aB");
+
+    float alt_print;
+    if(gf_sensor_baroAltitude <= 0){
+
+        alt_print = 0.0;
+    }
+    else
+    {
+        alt_print = gf_sensor_baroAltitude * 100;
+    }
+    u8g_DrawStr(&gs_display, 66, 32, u8g_u16toa((uint16_t)alt_print,4));
+    u8g_DrawStr(&gs_display, 58, 44,"aL");
+    u8g_DrawStr(&gs_display, 66, 44, u8g_u16toa((uint16_t)gf_sensor_lidarAltitude,4));
 
     #endif
+
+}
+
+/**
+ * \brief   Blocks FreeRTOS Task and sets timeout faults and i2c faults
+ */
+uint8_t blockTaskTillEventBitIsSet(uint32_t ui32_eventBits, uint32_t ui32_eventTimeout_Ms)
+{
+
+    volatile EventBits_t x_sensorEventBits;
+    //  Wait for sensor received event
+    xEventGroupClearBits(gx_sensor_EventGroup,
+                         event_SENSOR_RECEIVED |
+                         event_SENSOR_BARO_RECEIVED|
+                         event_SENSOR_LIDAR_RECEIVED);
+
+    x_sensorEventBits = xEventGroupWaitBits(gx_sensor_EventGroup,
+                                            ui32_eventBits,
+                                            pdTRUE,          // clear Bits before returning.
+                                            pdTRUE,          // wait for all Bits
+                                            ui32_eventTimeout_Ms / portTICK_PERIOD_MS ); // maximum wait time
+
+    // unblock because of timeout, or i2cError?
+    uint8_t ui8_error= (ui32_eventBits & x_sensorEventBits) != ui32_eventBits;
+
+    // set an error if a change from ui8_error from 0 to 1 occurs (rising edge)
+    HIDE_Fault_Increment(fault_SENSOR, ui8_error);
+
+    if( ui8_error )
+    {
+       xEventGroupSetBits(gx_fault_EventGroup,fault_SENSOR);
+       return (1);
+
+    }
+    else
+    {
+       xEventGroupClearBits(gx_fault_EventGroup,fault_SENSOR);
+       HIDE_senMesRec_Increment(event_SENSOR_RECEIVED);
+       return(0);
+    }
+
 
 }
 
@@ -400,12 +457,14 @@ void Sensor_DrawDisplay(void)
     // flags for i2c transfer
     static volatile uint8_t ui8_i2cFinishedFlag = 0;
     static volatile uint8_t ui8_i2cErrorFlag = 0;
-    static volatile uint8_t ui8_i2cMPU9265DataReadFlag = 0;
+    static volatile uint8_t ui8_i2cDataReadFlag = 0;
+
 
     // variables for MPU sensor functions
     MPU9265_s s_MPU9265Inst;
     MPU9265_AK8963_rawData_s s_MPU9265_AK8963_rawData;
     static uint8_t ui8_mpuInitFlag = 0;
+
 
     // struct for low pass filtering of acc data
     struct lp_a_struct lp_offsets = {
@@ -429,12 +488,15 @@ void Sensor_DrawDisplay(void)
         static uint8_t ui8_baroInitFlag = 0;
         static uint8_t ui8_MS5611LoopCounter = 0;
         static uint8_t ui8_MS5611MesCounter = 0;
+        static uint8_t ui8_MS5611NewMesFlag = 0;
     #endif
 
     #if ( setup_ALT_LIDAR )
         LidarLitev3HP_s s_LidarLitev3HPInst;
         static uint16_t ui16_lidarAltitude;
         static uint8_t ui8_lidarInitFlag = 0;
+        static uint8_t ui8_lidarLoopCounter = 0;
+        static uint8_t ui8_lidarNewMesFlag = 0;
 
     #endif
 
@@ -462,10 +524,6 @@ void Sensor_DrawDisplay(void)
         if(ui8_i2cState == I2CM_STATUS_SUCCESS){
 
             ui8_i2cErrorFlag = 0;
-
-            if(ui8_mpuInitFlag){
-                HIDE_Workload_EstimateStop(p_workHandle);
-            }
 
             // fire eventBit to notify Sensor Read has finished
             BaseType_t xHigherPriorityTaskWoken = pdFALSE;
@@ -640,17 +698,23 @@ void Sensor_DrawDisplay(void)
 
     }
 
+
+    #if (setup_ALT_BARO || setup_ALT_LIDAR)
+
+        /**
+          * \brief   ISR for I2C
+          *          Give the interrupt handle to the I2C Master instance
+          */
+         void Sensor_Alt_I2CIntHandler(void)
+         {
+             I2CMIntHandler(&i2cAltMastInst_s);
+         }
+
+    #endif
+
+
+
     #if (setup_ALT_BARO)
-
-
-    /**
-        * \brief   ISR for I2C
-        *          Give the interrupt handle to the I2C Master instance
-        */
-       void Sensor_Alt_I2CIntHandler(void)
-       {
-           I2CMIntHandler(&i2cAltMastInst_s);
-       }
 
        /**
        * \brief   MS5611 sensor callback function only set flag computation in other functions
@@ -662,10 +726,6 @@ void Sensor_DrawDisplay(void)
            if(ui8_i2cState == I2CM_STATUS_SUCCESS){
 
                ui8_i2cErrorFlag = 0;
-
-               if(ui8_mpuInitFlag && ui8_baroInitFlag){
-                   HIDE_Workload_EstimateStop(p_workHandle);
-               }
 
                // fire eventBit to notify Sensor Read has finished
                BaseType_t xHigherPriorityTaskWoken = pdFALSE;
@@ -685,7 +745,7 @@ void Sensor_DrawDisplay(void)
         /**
          * \brief   Calculate temp and pressure from raw sensor values after datasheet
          */
-        static void calculatePressureAndTemp(MS5611_rawData_s *ps_rawData, float *pf_sensorBaroData){
+        static void calculatePressureAndTemp(MS5611_rawData_s *ps_rawData, float pf_sensorBaroData[2]){
 
             // help variables to calculate smoth pressure values (look at datasheet of MS5611)
             int64_t OFF, OFF_C2, SENS, SENS_C1;
@@ -727,21 +787,20 @@ void Sensor_DrawDisplay(void)
         }
 
 
-
+        float f_pressureReference = 101325.0;
         /**
         * \brief   Calculate altitude from temp and pressure values also after calibrate set
         *          pressure reference to zero
         */
-        static float calculateAltitude(float *pf_sensorBaroData , uint8_t calibrate)
+        static float calculateAltitude(float pf_sensorBaroData[2] , uint8_t calibrate)
         {
 
             float f_altitude;
-            static float f_pressureReference = 101325.0; // see level
+
 
             // clean noise/values outside the resolution of the sensor from the pressure value
-            //float f_pressureClean, f_tempClean;
-            //modff(baroData.f_pressure, &pressureClean); // stores int part of pressure in pressureClean
-            //modff(baroData.f_temp, &tempClean);
+            float f_pressureClean;
+            modff(pf_sensorBaroData[P_BARO], &f_pressureClean); // stores int part of pressure in pressureClean
 
 
             if(calibrate == 1)
@@ -750,7 +809,7 @@ void Sensor_DrawDisplay(void)
             }
             else
             {
-                f_altitude = ((powf((f_pressureReference/pf_sensorBaroData[P_BARO]),
+                f_altitude = ((powf((f_pressureReference/f_pressureClean),
                                   (1.0/5.257)) - 1.0)*(pf_sensorBaroData[T_BARO] + 273.15)) / 0.0065;
             }
 
@@ -762,15 +821,6 @@ void Sensor_DrawDisplay(void)
 
     #if ( setup_ALT_LIDAR )
 
-        /**
-         * \brief   ISR for I2C
-         *          Give the interrupt handle to the I2C Master instance
-         */
-        void Sensor_Alt_I2CIntHandler(void)
-        {
-            I2CMIntHandler(&i2cAltMastInst_s);
-
-        }
 
         /**
           * \brief   LidarLitev3HP sensor callback function only set flag computation in other functions
@@ -782,10 +832,6 @@ void Sensor_DrawDisplay(void)
             if(ui8_i2cState == I2CM_STATUS_SUCCESS){
 
                ui8_i2cErrorFlag = 0;
-
-               if(ui8_lidarInitFlag){
-                   HIDE_Workload_EstimateStop(p_workHandle);
-               }
 
                // fire eventBit to notify Sensor Read has finished
                BaseType_t xHigherPriorityTaskWoken = pdFALSE;
@@ -876,6 +922,9 @@ void Sensor_DrawDisplay(void)
         // workload estimation for I2C
         HIDE_Workload_EstimateCreate(&p_workHandle, "sI2C");
 
+        // clear all event bits
+        xEventGroupClearBits(gx_fault_EventGroup,fault_SENSOR);
+
         #if ( setup_DEV_SUM_RECEIVS )
             HIDE_Display_InsertDrawFun(HIDE_senMesRec_DrawDisplay);
             p_senMesRec_countEdges = CountEdges_Create(event_SENSOR_BIT_COUNT);
@@ -892,102 +941,35 @@ void Sensor_DrawDisplay(void)
      */
     void Sensor_InitSensor(void)
     {
-
-        xEventGroupClearBits(gx_fault_EventGroup,fault_SENSOR);
-        xEventGroupClearBits(gx_sensor_EventGroup,event_SENSOR_RECEIVED);
-
-
-
         // if returned zero init was not succesfull
         if(!MPU9265_Init(&s_MPU9265Inst, &i2cMastInst_s, I2C_MPU_ADRESS, Sensor_MPU9265Callback, &s_MPU9265Inst))
-            while(1);
+            while(1); // couldn't initialize
 
-        EventBits_t x_sensorEventBits;
-        //  Wait for sensor received event
-        xEventGroupClearBits(gx_sensor_EventGroup, event_SENSOR_RECEIVED);
-        x_sensorEventBits = xEventGroupWaitBits(gx_sensor_EventGroup,
-                                                event_SENSOR_RECEIVED,
-                                                pdTRUE,          // clear Bits before returning.
-                                                pdTRUE,          // wait for all Bits
-                                                SENSOR_MPU_INIT_TIMEOUT_MS / portTICK_PERIOD_MS ); // maximum wait time
+        // blocks task till i2c communication is finished then sets mpu init flag if succesful 2c com
+        ui8_mpuInitFlag = blockTaskTillEventBitIsSet(event_SENSOR_RECEIVED, SENSOR_MPU_INIT_TIMEOUT_MS);
 
-        // unblock because of timeout, or i2cError?
-        uint8_t ui8_error=(event_SENSOR_RECEIVED & x_sensorEventBits == 0) || ui8_i2cErrorFlag != 0;
-        if( ui8_error )
-        {
-           xEventGroupSetBits(gx_fault_EventGroup,fault_SENSOR);
-        }
-        else
-        {
-           xEventGroupClearBits(gx_fault_EventGroup,fault_SENSOR);
-           ui8_mpuInitFlag = 1;
-        }
-        HIDE_Fault_Increment(fault_SENSOR,ui8_error);
 
     #if ( setup_ALT_BARO )
 
-        xEventGroupClearBits(gx_sensor_EventGroup,event_SENSOR_BARO_RECEIVED);
-
         if(!MS5611_Init(&s_MS5611Inst, &i2cAltMastInst_s, I2C_MS_ADDRESS, Sensor_MS5611Callback, &s_MS5611Inst))
-            while(1);
+            while(1); // couldn't initialize
 
-        EventBits_t x_sensorBaroEventBits;
-        x_sensorBaroEventBits = xEventGroupWaitBits(gx_sensor_EventGroup,
-                                                event_SENSOR_BARO_RECEIVED,
-                                                pdTRUE,          // clear Bits before returning.
-                                                pdTRUE,          // wait for all Bits
-                                                SENSOR_BARO_INIT_TIMEOUT_MS / portTICK_PERIOD_MS ); // maximum wait time
+        // blocks task till i2c communication is finished then sets baro init flag if succesful 2c com
+        ui8_baroInitFlag = blockTaskTillEventBitIsSet(event_SENSOR_BARO_RECEIVED, SENSOR_BARO_INIT_TIMEOUT_MS);
 
-        // unblock because of timeout, or i2cError?
-        ui8_error=(event_SENSOR_BARO_RECEIVED & x_sensorBaroEventBits == 0) || ui8_i2cErrorFlag != 0;
-        if( ui8_error )
-        {
-           xEventGroupSetBits(gx_fault_EventGroup,fault_SENSOR);
-        }
-        else
-        {
-           xEventGroupClearBits(gx_fault_EventGroup,fault_SENSOR);
+        // Copy calibration values into local variable from buffer
+        MS5611_GetCalibrationValues(&s_MS5611Inst, ui16_MS5611CalVal);
 
-           ui8_baroInitFlag = 1;
-
-           // Copy calibration values into local variable from buffer
-           MS5611_GetCalibrationValues(&s_MS5611Inst, ui16_MS5611CalVal);
-        }
-        HIDE_Fault_Increment(fault_SENSOR,ui8_error);
     #endif
 
     #if ( setup_ALT_LIDAR )
 
-        xEventGroupClearBits(gx_sensor_EventGroup, event_SENSOR_LIDAR_RECEIVED);
-
         if(!LidarLitev3HP_Init(&s_LidarLitev3HPInst, &i2cAltMastInst_s, LIDARLITEV3HP_ADDRESS,
                                Sensor_LidarLitev3HPCallback, &s_LidarLitev3HPInst))
-        {
-            // couldn't initialize
-        }
+            while(1); // couldn't initialize
 
-        EventBits_t x_sensorLidarEventBits;
-        x_sensorLidarEventBits = xEventGroupWaitBits(gx_sensor_EventGroup,
-                                                event_SENSOR_LIDAR_RECEIVED,
-                                                pdTRUE,          // clear Bits before returning.
-                                                pdTRUE,          // wait for all Bits
-                                                SENSOR_LIDAR_INIT_TIMEOUT_MS / portTICK_PERIOD_MS ); // maximum wait time
-
-        // unblock because of timeout, or i2cError?
-        ui8_error=(event_SENSOR_LIDAR_RECEIVED & x_sensorLidarEventBits == 0) || ui8_i2cErrorFlag != 0;
-        if( ui8_error )
-        {
-           xEventGroupSetBits(gx_fault_EventGroup,fault_SENSOR);
-        }
-        else
-        {
-            // Lidar is initialized
-           xEventGroupClearBits(gx_fault_EventGroup,fault_SENSOR);
-           ui8_lidarInitFlag = 1;
-
-        }
-        HIDE_Fault_Increment(fault_SENSOR,ui8_error);
-
+        ui8_lidarInitFlag = blockTaskTillEventBitIsSet(event_SENSOR_LIDAR_RECEIVED,
+                                                       SENSOR_LIDAR_INIT_TIMEOUT_MS);
     #endif
 
     }
@@ -1001,161 +983,165 @@ void Sensor_DrawDisplay(void)
 
         if(!MPU9265_ReadData(&s_MPU9265Inst, Sensor_MPU9265Callback, &s_MPU9265Inst))
         {
-            // couln't initiate a read
+         // couln't initiate a read
         }
 
-
+        // Start workload estimation for i2c
         HIDE_Workload_EstimateStart(p_workHandle);
-        EventBits_t x_sensorEventBits;
-        //  Wait for sensor received event
-       //xEventGroupClearBits(gx_sensor_EventGroup,event_SENSOR_RECEIVED);
-        x_sensorEventBits = xEventGroupWaitBits(gx_sensor_EventGroup,
-                                                   event_SENSOR_RECEIVED,
-                                                   pdTRUE,          // clear Bits before returning.
-                                                   pdTRUE,          // wait for all Bits
-                                                   SENSOR_READ_TIMEOUT_MS / portTICK_PERIOD_MS ); // maximum wait time
 
-        // unblock because of timeout, or i2cError?
-        uint8_t ui8_error=(event_SENSOR_RECEIVED & x_sensorEventBits == 0) || ui8_i2cErrorFlag != 0;
-        if( ui8_error )
-        {
-           xEventGroupSetBits(gx_fault_EventGroup,fault_SENSOR);
-        }
-        else
-        {
-           xEventGroupClearBits(gx_fault_EventGroup,fault_SENSOR);
-           HIDE_senMesRec_Increment(event_SENSOR_RECEIVED);
-        }
-        HIDE_Fault_Increment(fault_SENSOR,ui8_error);
+        #if( !(setup_ALT_BARO || setup_ALT_LIDAR) )
 
-        // Get MPU data and convert it
-        MPU9265_AK8963_GetRawData(&s_MPU9265Inst, &s_MPU9265_AK8963_rawData);
+             ui8_i2cDataReadFlag = blockTaskTillEventBitIsSet(event_SENSOR_RECEIVED, SENSOR_READ_TIMEOUT_MS);
 
-//        gf_sensor_raw[0] = s_MPU9265_AK8963_rawData.i16_accX;
-//        gf_sensor_raw[1] = s_MPU9265_AK8963_rawData.i16_accY;
-//        gf_sensor_raw[2] = s_MPU9265_AK8963_rawData.i16_accZ;
-//        gf_sensor_raw[3] = s_MPU9265_AK8963_rawData.i16_gyroX;
-//        gf_sensor_raw[4] = s_MPU9265_AK8963_rawData.i16_gyroY;
-//        gf_sensor_raw[5] = s_MPU9265_AK8963_rawData.i16_gyroZ;
-//        gf_sensor_raw[6] = s_MPU9265_AK8963_rawData.i16_magX;
-//        gf_sensor_raw[7] = s_MPU9265_AK8963_rawData.i16_magY;
-//        gf_sensor_raw[8] = s_MPU9265_AK8963_rawData.i16_magZ;
+        #endif
 
+     #if (setup_ALT_LIDAR)
 
-        MPUrawData2Float(pf_sensorData);
-        // Correct MPU data
-        MPUAxis2QCAxis(pf_sensorData);
-        convertMPUData(pf_sensorData);
-        correctMPUOffset(pf_sensorData, 1);
+         ui8_lidarLoopCounter++;
 
+         if(ui8_lidarLoopCounter == SENSOR_LIDAR_MEASUREMENT)
+         {
 
-        // TODO just test sensor data
+             ui8_lidarNewMesFlag = 1;
+             // start lidar read sequence for altitude measurement
+             LidarLitev3HP_ReadData(&s_LidarLitev3HPInst, Sensor_LidarLitev3HPCallback, &s_LidarLitev3HPInst);
+         }
 
+         #if (!setup_ALT_BARO)
 
+             ui8_i2cDataReadFlag = blockTaskTillEventBitIsSet(event_SENSOR_RECEIVED | event_SENSOR_LIDAR_RECEIVED,
+                                                              SENSOR_READ_TIMEOUT_MS);
 
+          #endif
+     #endif
 
-    #if ( setup_ALT_BARO )
+     #if ( setup_ALT_BARO )
 
-        float pf_sensorBaroData[2];
-        // decide which baro read seuqence should be initiated
-        // after init temp data should be ready to read
+         float pf_sensorBaroData[2];
+         // decide which baro read seuqence should be initiated
+         // after init temp data should be ready to read
 
-        // increase the loop counter each time
-        ui8_MS5611LoopCounter++;
+         // increase the loop counter each time
+         ui8_MS5611LoopCounter++;
 
-        // Every 5th loop (~10ms) a new pressure value is read
-        if(ui8_MS5611LoopCounter == SENSOR_BARO_MEASUREMENT)
-        {
-            // reset
-            ui8_MS5611LoopCounter = 0;
+         // Every 5th loop (~10ms) a new pressure value is read
+         if(ui8_MS5611LoopCounter == SENSOR_BARO_MEASUREMENT)
+         {
+             // reset
+             ui8_MS5611LoopCounter = 0;
 
-            if(ui8_MS5611MesCounter == SENSOR_BARO_MEASUREMENT_TEMP)
-            {
-                ui8_MS5611MesCounter = 0;
-                MS5611_ReadData(&s_MS5611Inst, Sensor_MS5611Callback, &s_MS5611Inst,
-                                                SENSOR_BARO_READ_TEMP_REQ_PRESS);
+             if(ui8_MS5611MesCounter == SENSOR_BARO_MEASUREMENT_TEMP)
+             {
+                 ui8_MS5611MesCounter = 0;
+                 MS5611_ReadData(&s_MS5611Inst, Sensor_MS5611Callback, &s_MS5611Inst,
+                                                 SENSOR_BARO_READ_TEMP_REQ_PRESS);
 
-                ui8_MS5611MesCounter = 0;
-            }
-            else if(ui8_MS5611MesCounter == SENSOR_BARO_MEASUREMENT_TEMP - 1)
-            {
-                MS5611_ReadData(&s_MS5611Inst, Sensor_MS5611Callback, &s_MS5611Inst,
-                                                SENSOR_BARO_READ_PRESS_REQ_TEMP);
-                ui8_MS5611MesCounter++;
-            }
-            else
-            {
-                MS5611_ReadData(&s_MS5611Inst, Sensor_MS5611Callback, &s_MS5611Inst,
-                                SENSOR_BARO_READ_PRESS_REQ_PRESS);
-                ui8_MS5611MesCounter++;
-            }
+                 ui8_MS5611MesCounter = 0;
+             }
+             else if(ui8_MS5611MesCounter == SENSOR_BARO_MEASUREMENT_TEMP - 1)
+             {
+                 MS5611_ReadData(&s_MS5611Inst, Sensor_MS5611Callback, &s_MS5611Inst,
+                                                 SENSOR_BARO_READ_PRESS_REQ_TEMP);
+                 ui8_MS5611MesCounter++;
+             }
+             else
+             {
+                 MS5611_ReadData(&s_MS5611Inst, Sensor_MS5611Callback, &s_MS5611Inst,
+                                 SENSOR_BARO_READ_PRESS_REQ_PRESS);
+                 ui8_MS5611MesCounter++;
+             }
 
-            EventBits_t x_sensorBaroEventBits;
-            xEventGroupClearBits(gx_sensor_EventGroup,event_SENSOR_BARO_RECEIVED);
-            x_sensorBaroEventBits = xEventGroupWaitBits(gx_sensor_EventGroup,
-                                                    event_SENSOR_BARO_RECEIVED,
-                                                    pdTRUE,          // clear Bits before returning.
-                                                    pdTRUE,          // wait for all Bits
-                                                    SENSOR_BARO_READ_TIMEOUT_MS / portTICK_PERIOD_MS ); // maximum wait time
+             ui8_MS5611NewMesFlag = 1;
 
-            // unblock because of timeout, or i2cError?
-            ui8_error=(event_SENSOR_BARO_RECEIVED & x_sensorBaroEventBits == 0) || ui8_i2cErrorFlag != 0;
-            if( ui8_error )
-            {
-               xEventGroupSetBits(gx_fault_EventGroup,fault_SENSOR);
-            }
-            else
-            {
-               xEventGroupClearBits(gx_fault_EventGroup,fault_SENSOR);
+             #if (setup_ALT_LIDAR)
 
-            }
-            HIDE_Fault_Increment(fault_SENSOR,ui8_error);
-        }
+                 if(ui8_lidarLoopCounter == SENSOR_LIDAR_MEASUREMENT)
+                 {
+                     ui8_lidarLoopCounter = 0;
+                     ui8_i2cDataReadFlag = blockTaskTillEventBitIsSet(event_SENSOR_BARO_RECEIVED  |
+                                                                      event_SENSOR_LIDAR_RECEIVED |
+                                                                      event_SENSOR_RECEIVED,
+                                                                      SENSOR_READ_TIMEOUT_MS);
+
+                 }
+                 else
+                 {
+                     ui8_i2cDataReadFlag = blockTaskTillEventBitIsSet(event_SENSOR_BARO_RECEIVED  |
+                                                                      event_SENSOR_RECEIVED,
+                                                                      SENSOR_READ_TIMEOUT_MS);
+                 }
+             #else
 
 
-        // get the new raw baro data and calculate is firstly started after
-        // 20 pressure and 5 temp values have been read then calculate pressure/altitude
-        if(MS5611_GetRawData(&s_MS5611Inst, &s_MS5611_rawData) &&
-                ui8_MS5611LoopCounter == SENSOR_BARO_MEASUREMENT)
-        {
-            calculatePressureAndTemp(&s_MS5611_rawData, pf_sensorBaroData);
-            // in calibration mode altitude doesn't have to be saved
-            calculateAltitude(pf_sensorBaroData, 1);
+             ui8_i2cDataReadFlag = blockTaskTillEventBitIsSet(event_SENSOR_BARO_RECEIVED |
+                                                              event_SENSOR_RECEIVED,
+                                                              SENSOR_READ_TIMEOUT_MS);
 
-        }
+             #endif
+
+         }
+
+         else
+         {
+            #if (setup_ALT_LIDAR)
+
+                 if(ui8_lidarLoopCounter == SENSOR_LIDAR_MEASUREMENT )
+                 {
+                     ui8_lidarLoopCounter = 0;
+                     ui8_i2cDataReadFlag = blockTaskTillEventBitIsSet(event_SENSOR_LIDAR_RECEIVED |
+                                                                      event_SENSOR_RECEIVED,
+                                                                      SENSOR_READ_TIMEOUT_MS);
+                 }
+                 else
+                 {
+                     ui8_i2cDataReadFlag = blockTaskTillEventBitIsSet(event_SENSOR_RECEIVED,
+                                                                      SENSOR_READ_TIMEOUT_MS);
+                 }
+
+            #else
+
+                 ui8_i2cDataReadFlag = blockTaskTillEventBitIsSet(event_SENSOR_RECEIVED,
+                                                                  SENSOR_READ_TIMEOUT_MS);
+            #endif
+         }
+
+     #endif
+
+     // stop i2c workload
+     HIDE_Workload_EstimateStop(p_workHandle);
+    // Get MPU data and convert it
+    MPU9265_AK8963_GetRawData(&s_MPU9265Inst, &s_MPU9265_AK8963_rawData);
+    MPUrawData2Float(pf_sensorData);
+    // Correct MPU data
+    MPUAxis2QCAxis(pf_sensorData);
+    convertMPUData(pf_sensorData);
+    correctMPUOffset(pf_sensorData, 1);
+
+    #if (setup_ALT_BARO)
+
+                if((MS5611_GetRawData(&s_MS5611Inst, &s_MS5611_rawData) && ui8_MS5611NewMesFlag == 1))
+                {
+
+                    ui8_MS5611NewMesFlag = 0;
+                    calculatePressureAndTemp(&s_MS5611_rawData, pf_sensorBaroData);
+                    // in calibration mode altitude doesn't have to be saved
+                    calculateAltitude(pf_sensorBaroData, 1);
+                }
 
     #endif
 
     #if (setup_ALT_LIDAR)
 
-        // start lidar read sequence for altitude measurement
-        LidarLitev3HP_ReadData(&s_LidarLitev3HPInst, Sensor_LidarLitev3HPCallback, &s_LidarLitev3HPInst);
-
-        EventBits_t x_sensorLidarEventBits;
-        xEventGroupClearBits(gx_sensor_EventGroup, event_SENSOR_LIDAR_RECEIVED);
-        x_sensorLidarEventBits = xEventGroupWaitBits(gx_sensor_EventGroup,
-                                                    event_SENSOR_LIDAR_RECEIVED,
-                                                    pdTRUE,          // clear Bits before returning.
-                                                    pdTRUE,          // wait for all Bits
-                                                    SENSOR_LIDAR_READ_TIMEOUT_MS / portTICK_PERIOD_MS ); // maximum wait time
-
-        // unblock because of timeout, or i2cError?
-        ui8_error=(event_SENSOR_LIDAR_RECEIVED & x_sensorLidarEventBits == 0) || ui8_i2cErrorFlag != 0;
-        if( ui8_error )
+        if(ui8_lidarNewMesFlag)
         {
-          xEventGroupSetBits(gx_fault_EventGroup,fault_SENSOR);
+            ui8_lidarNewMesFlag = 0;
+            // copy the read buffer into global variables
+            LidarLitev3HP_GetRawData(&s_LidarLitev3HPInst, &ui16_lidarAltitude, &gf_sensor_lidarAltitude);
         }
-        else
-        {
-          xEventGroupClearBits(gx_fault_EventGroup,fault_SENSOR);
-
-        }
-        HIDE_Fault_Increment(fault_SENSOR,ui8_error);
-
-        // copy the read buffer into global variables
-        LidarLitev3HP_GetRawData(&s_LidarLitev3HPInst, &ui16_lidarAltitude, &gf_sensor_lidarAltitude);
-
     #endif
+
+
+
     }
     /**
      * \brief   read the sonsor and prepare data (sensor fusion).
@@ -1166,182 +1152,204 @@ void Sensor_DrawDisplay(void)
      */
     void Sensor_ReadAndFusion(void)
     {
-        // Read out sensor data and perform formatting
         float pf_sensorData[9];
-        // TODO test baro
 
         if(!MPU9265_ReadData(&s_MPU9265Inst, Sensor_MPU9265Callback, &s_MPU9265Inst))
         {
             // couln't initiate a read
         }
 
+        // Start workload estimation for i2c
         HIDE_Workload_EstimateStart(p_workHandle);
-        EventBits_t x_sensorEventBits;
-        //  Wait for sensor received event
-        xEventGroupClearBits(gx_sensor_EventGroup,event_SENSOR_RECEIVED);
-        x_sensorEventBits = xEventGroupWaitBits(gx_sensor_EventGroup,
-                                                event_SENSOR_RECEIVED,
-                                                pdTRUE,          // clear Bits before returning.
-                                                pdTRUE,          // wait for all Bits
-                                                SENSOR_READ_TIMEOUT_MS / portTICK_PERIOD_MS ); // maximum wait time
 
-        // unblock because of timeout, or i2cError?
-        uint8_t ui8_error=(event_SENSOR_RECEIVED & x_sensorEventBits == 0) || ui8_i2cErrorFlag != 0;
-        if( ui8_error )
+        #if( !(setup_ALT_BARO || setup_ALT_LIDAR) )
+
+            ui8_i2cDataReadFlag = blockTaskTillEventBitIsSet(event_SENSOR_RECEIVED, SENSOR_READ_TIMEOUT_MS);
+
+        #endif
+
+        #if (setup_ALT_LIDAR)
+
+            ui8_lidarLoopCounter++;
+            if(ui8_lidarLoopCounter == SENSOR_LIDAR_MEASUREMENT)
+            {
+
+                 ui8_lidarNewMesFlag = 1;
+                 // start lidar read sequence for altitude measurement
+                 LidarLitev3HP_ReadData(&s_LidarLitev3HPInst, Sensor_LidarLitev3HPCallback, &s_LidarLitev3HPInst);
+            }
+
+            #if (!setup_ALT_BARO)
+
+                ui8_i2cDataReadFlag = blockTaskTillEventBitIsSet(event_SENSOR_RECEIVED |
+                                                                 event_SENSOR_LIDAR_RECEIVED,
+                                                                 SENSOR_READ_TIMEOUT_MS);
+
+            #endif
+        #endif
+
+        #if ( setup_ALT_BARO )
+
+            float pf_sensorBaroData[2];
+            // decide which baro read seuqence should be initiated
+            // after init temp data should be ready to read
+
+            // increase the loop counter each time
+            ui8_MS5611LoopCounter++;
+
+            // Every 5th loop (~10ms) a new pressure value is read
+            if(ui8_MS5611LoopCounter == SENSOR_BARO_MEASUREMENT)
+            {
+                // reset
+                ui8_MS5611LoopCounter = 0;
+
+                if(ui8_MS5611MesCounter == SENSOR_BARO_MEASUREMENT_TEMP)
+                {
+                    ui8_MS5611MesCounter = 0;
+                    MS5611_ReadData(&s_MS5611Inst, Sensor_MS5611Callback, &s_MS5611Inst,
+                                       SENSOR_BARO_READ_TEMP_REQ_PRESS);
+
+                    ui8_MS5611MesCounter = 0;
+                }
+                else if(ui8_MS5611MesCounter == SENSOR_BARO_MEASUREMENT_TEMP - 1)
+                {
+                    MS5611_ReadData(&s_MS5611Inst, Sensor_MS5611Callback, &s_MS5611Inst,
+                                           SENSOR_BARO_READ_PRESS_REQ_TEMP);
+                    ui8_MS5611MesCounter++;
+                }
+                else
+                {
+                    MS5611_ReadData(&s_MS5611Inst, Sensor_MS5611Callback, &s_MS5611Inst,
+                           SENSOR_BARO_READ_PRESS_REQ_PRESS);
+                    ui8_MS5611MesCounter++;
+                }
+
+                ui8_MS5611NewMesFlag = 1;
+
+            #if (setup_ALT_LIDAR)
+                if(ui8_lidarLoopCounter == SENSOR_LIDAR_MEASUREMENT)
+                {
+                    ui8_lidarLoopCounter = 0;
+                    ui8_i2cDataReadFlag = blockTaskTillEventBitIsSet(event_SENSOR_BARO_RECEIVED  |
+                                                                     event_SENSOR_LIDAR_RECEIVED |
+                                                                     event_SENSOR_RECEIVED,
+                                                                     SENSOR_READ_TIMEOUT_MS);
+
+                }
+                else
+                {
+                    ui8_i2cDataReadFlag = blockTaskTillEventBitIsSet(event_SENSOR_BARO_RECEIVED  |
+                                                                     event_SENSOR_RECEIVED,
+                                                                     SENSOR_READ_TIMEOUT_MS);
+                 }
+            #else
+
+
+                    ui8_i2cDataReadFlag = blockTaskTillEventBitIsSet(event_SENSOR_BARO_RECEIVED |
+                                                            event_SENSOR_RECEIVED,
+                                                            SENSOR_READ_TIMEOUT_MS);
+
+            #endif
+
+            }
+
+            else
+            {
+                #if (setup_ALT_LIDAR)
+
+                    if(ui8_lidarLoopCounter == SENSOR_LIDAR_MEASUREMENT )
+                    {
+                        ui8_lidarLoopCounter = 0;
+                        ui8_i2cDataReadFlag = blockTaskTillEventBitIsSet(event_SENSOR_LIDAR_RECEIVED |
+                                                                         event_SENSOR_RECEIVED,
+                                                                         SENSOR_READ_TIMEOUT_MS);
+                    }
+                    else
+                    {
+                        ui8_i2cDataReadFlag = blockTaskTillEventBitIsSet(event_SENSOR_RECEIVED,
+                                                                         SENSOR_READ_TIMEOUT_MS);
+                    }
+                #else
+
+                    ui8_i2cDataReadFlag = blockTaskTillEventBitIsSet(event_SENSOR_RECEIVED,
+                                            SENSOR_READ_TIMEOUT_MS);
+                #endif
+            }
+
+        #endif
+
+    // stop i2c workload
+    HIDE_Workload_EstimateStop(p_workHandle);
+    // Get MPU data and convert it
+    MPU9265_AK8963_GetRawData(&s_MPU9265Inst, &s_MPU9265_AK8963_rawData);
+
+    //        // TODO delete later jus test
+    //        gf_sensor_raw[0] = s_MPU9265_AK8963_rawData.i16_accX;
+    //        gf_sensor_raw[1] = s_MPU9265_AK8963_rawData.i16_accY;
+    //        gf_sensor_raw[2] = s_MPU9265_AK8963_rawData.i16_accZ;
+    //        gf_sensor_raw[3] = s_MPU9265_AK8963_rawData.i16_gyroX;
+    //        gf_sensor_raw[4] = s_MPU9265_AK8963_rawData.i16_gyroY;
+    //        gf_sensor_raw[5] = s_MPU9265_AK8963_rawData.i16_gyroZ;
+    //        gf_sensor_raw[6] = s_MPU9265_AK8963_rawData.i16_magX;
+    //        gf_sensor_raw[7] = s_MPU9265_AK8963_rawData.i16_magY;
+    //        gf_sensor_raw[8] = s_MPU9265_AK8963_rawData.i16_magZ;
+
+    MPUrawData2Float(pf_sensorData);
+    // Correct MPU data
+    MPUAxis2QCAxis(pf_sensorData);
+    convertMPUData(pf_sensorData);
+    correctMPUOffset(pf_sensorData, 0);
+
+//    // TODO delete later just test
+//    gf_usb_debug[0] = pf_sensorData[0];
+//    gf_usb_debug[1] = pf_sensorData[1];
+//    gf_usb_debug[2] = pf_sensorData[2];
+//    gf_usb_debug[3] = pf_sensorData[3];
+//    gf_usb_debug[4] = pf_sensorData[4];
+//    gf_usb_debug[5] = pf_sensorData[5];
+//    gf_usb_debug[6] = pf_sensorData[6];
+//    gf_usb_debug[7] = pf_sensorData[7];
+//    gf_usb_debug[8] = pf_sensorData[8];
+
+
+    // Get attitude quaternion via sensor fusion from MPU data
+    MadgwickAHRSupdate(pf_sensorData[X_ACC], pf_sensorData[Y_ACC], pf_sensorData[Z_ACC],
+                      pf_sensorData[X_GYRO],  pf_sensorData[Y_GYRO], pf_sensorData[Z_GYRO],
+                      pf_sensorData[X_MAG], pf_sensorData[Y_MAG], pf_sensorData[Z_MAG],
+                      gf_sensor_attitudeQuaternion, gf_sensor_dotAttitudeQuaternion, dt);
+
+    // Get Euler/Tait-Bryan angles from quaternion
+    Math_QuatToEuler(gf_sensor_attitudeQuaternion, gf_sensor_fusedAngles);
+    calculateAngularVelocity(gf_sensor_fusedAngles, gf_sensor_angularVelocity);
+
+    #if (setup_ALT_BARO)
+
+
+        // get the new raw baro data and calculate is firstly started after
+        // 20 pressure and 5 temp values have been read then calculate pressure/altitude
+        if((MS5611_GetRawData(&s_MS5611Inst, &s_MS5611_rawData) && ui8_MS5611NewMesFlag == 1))
         {
-           xEventGroupSetBits(gx_fault_EventGroup,fault_SENSOR);
-        }
-        else
-        {
-           xEventGroupClearBits(gx_fault_EventGroup,fault_SENSOR);
-           HIDE_senMesRec_Increment(event_SENSOR_RECEIVED);
-        }
-        HIDE_Fault_Increment(fault_SENSOR,ui8_error);
 
-        // Get MPU data and convert it
-        MPU9265_AK8963_GetRawData(&s_MPU9265Inst, &s_MPU9265_AK8963_rawData);
-
-//        // TODO delete later jus test
-//        gf_sensor_raw[0] = s_MPU9265_AK8963_rawData.i16_accX;
-//        gf_sensor_raw[1] = s_MPU9265_AK8963_rawData.i16_accY;
-//        gf_sensor_raw[2] = s_MPU9265_AK8963_rawData.i16_accZ;
-//        gf_sensor_raw[3] = s_MPU9265_AK8963_rawData.i16_gyroX;
-//        gf_sensor_raw[4] = s_MPU9265_AK8963_rawData.i16_gyroY;
-//        gf_sensor_raw[5] = s_MPU9265_AK8963_rawData.i16_gyroZ;
-//        gf_sensor_raw[6] = s_MPU9265_AK8963_rawData.i16_magX;
-//        gf_sensor_raw[7] = s_MPU9265_AK8963_rawData.i16_magY;
-//        gf_sensor_raw[8] = s_MPU9265_AK8963_rawData.i16_magZ;
-
-        MPUrawData2Float(pf_sensorData);
-        // Correct MPU data
-        MPUAxis2QCAxis(pf_sensorData);
-        convertMPUData(pf_sensorData);
-        correctMPUOffset(pf_sensorData, 0);
-
-        // TODO delete later just test
-        gf_usb_debug[0] = pf_sensorData[0];
-        gf_usb_debug[1] = pf_sensorData[1];
-        gf_usb_debug[2] = pf_sensorData[2];
-        gf_usb_debug[3] = pf_sensorData[3];
-        gf_usb_debug[4] = pf_sensorData[4];
-        gf_usb_debug[5] = pf_sensorData[5];
-        gf_usb_debug[6] = pf_sensorData[6];
-        gf_usb_debug[7] = pf_sensorData[7];
-        gf_usb_debug[8] = pf_sensorData[8];
-
-
-        // Get attitude quaternion via sensor fusion from MPU data
-        MadgwickAHRSupdate(pf_sensorData[X_ACC], pf_sensorData[Y_ACC], pf_sensorData[Z_ACC],
-                           pf_sensorData[X_GYRO],  pf_sensorData[Y_GYRO], pf_sensorData[Z_GYRO],
-                           pf_sensorData[X_MAG], pf_sensorData[Y_MAG], pf_sensorData[Z_MAG],
-                           gf_sensor_attitudeQuaternion, gf_sensor_dotAttitudeQuaternion, dt);
-
-        // Get Euler/Tait-Bryan angles from quaternion
-        Math_QuatToEuler(gf_sensor_attitudeQuaternion, gf_sensor_fusedAngles);
-        calculateAngularVelocity(gf_sensor_fusedAngles, gf_sensor_angularVelocity);
-
-    #if ( setup_ALT_BARO )
-
-        float pf_sensorBaroData[2];
-        // decide which baro read seuqence should be initiated
-        // after init temp data should be ready to read
-
-        // increase the loop counter each time
-        ui8_MS5611LoopCounter++;
-
-        // Every 5th loop (~10ms) a new pressure value is read
-        if(ui8_MS5611LoopCounter == SENSOR_BARO_MEASUREMENT)
-        {
             // reset
-            ui8_MS5611LoopCounter = 0;
+            ui8_MS5611NewMesFlag = 0;
 
-            if(ui8_MS5611MesCounter == SENSOR_BARO_MEASUREMENT_TEMP)
-            {
-                ui8_MS5611MesCounter = 0;
-                MS5611_ReadData(&s_MS5611Inst, Sensor_MS5611Callback, &s_MS5611Inst,
-                                                SENSOR_BARO_READ_TEMP_REQ_PRESS);
-
-                ui8_MS5611MesCounter = 0;
-            }
-            else if(ui8_MS5611MesCounter == SENSOR_BARO_MEASUREMENT_TEMP - 1)
-            {
-                MS5611_ReadData(&s_MS5611Inst, Sensor_MS5611Callback, &s_MS5611Inst,
-                                                SENSOR_BARO_READ_PRESS_REQ_TEMP);
-                ui8_MS5611MesCounter++;
-            }
-            else
-            {
-                MS5611_ReadData(&s_MS5611Inst, Sensor_MS5611Callback, &s_MS5611Inst,
-                                SENSOR_BARO_READ_PRESS_REQ_PRESS);
-                ui8_MS5611MesCounter++;
-            }
-
-
-            volatile EventBits_t x_sensorBaroEventBits;
-
-            xEventGroupClearBits(gx_sensor_EventGroup,event_SENSOR_BARO_RECEIVED);
-            x_sensorBaroEventBits = xEventGroupWaitBits(gx_sensor_EventGroup,
-                                    event_SENSOR_BARO_RECEIVED,
-                                    pdTRUE,          // clear Bits before returning.
-                                    pdTRUE,          // wait for all Bits
-                                    SENSOR_BARO_READ_TIMEOUT_MS / portTICK_PERIOD_MS ); // maximum wait time
-
-            // unblock because of timeout, or i2cError?
-            ui8_error=(event_SENSOR_BARO_RECEIVED & x_sensorBaroEventBits == 0) || ui8_i2cErrorFlag != 0;
-            if( ui8_error )
-            {
-               xEventGroupSetBits(gx_fault_EventGroup,fault_SENSOR);
-            }
-            else
-            {
-               xEventGroupClearBits(gx_fault_EventGroup,fault_SENSOR);
-
-            }
-            HIDE_Fault_Increment(fault_SENSOR,ui8_error);
-
-            // get the new raw baro data and calculate is firstly started after
-            // 20 pressure and 5 temp values have been read then calculate pressure/altitude
-            if(MS5611_GetRawData(&s_MS5611Inst, &s_MS5611_rawData))
-            {
-                calculatePressureAndTemp(&s_MS5611_rawData, pf_sensorBaroData);
-                // in sensorReadAndFusion mode altitude is saved into global variable
-                gf_sensor_pressure = pf_sensorBaroData[P_BARO];
-                gf_sensor_baroAltitude = calculateAltitude(pf_sensorBaroData, 0);
-            }
-
+            calculatePressureAndTemp(&s_MS5611_rawData, pf_sensorBaroData);
+            // in calibration mode altitude doesn't have to be saved
+            gf_sensor_baroAltitude = calculateAltitude(pf_sensorBaroData, 0);
         }
+
+
     #endif
 
     #if (setup_ALT_LIDAR)
+        if(ui8_lidarNewMesFlag)
+        {
+            ui8_lidarNewMesFlag = 0;
+            // copy the read buffer into global variables
+            LidarLitev3HP_GetRawData(&s_LidarLitev3HPInst, &ui16_lidarAltitude, &gf_sensor_lidarAltitude);
+        }
+    #endif
 
-           // start lidar read sequence for altitude measurement
-           LidarLitev3HP_ReadData(&s_LidarLitev3HPInst, Sensor_LidarLitev3HPCallback, &s_LidarLitev3HPInst);
-
-           EventBits_t x_sensorLidarEventBits;
-           xEventGroupClearBits(gx_sensor_EventGroup, event_SENSOR_LIDAR_RECEIVED);
-           x_sensorLidarEventBits = xEventGroupWaitBits(gx_sensor_EventGroup,
-                                                       event_SENSOR_LIDAR_RECEIVED,
-                                                       pdTRUE,          // clear Bits before returning.
-                                                       pdTRUE,          // wait for all Bits
-                                                       SENSOR_LIDAR_READ_TIMEOUT_MS / portTICK_PERIOD_MS ); // maximum wait time
-
-           // unblock because of timeout, or i2cError?
-           ui8_error=(event_SENSOR_LIDAR_RECEIVED & x_sensorLidarEventBits == 0) || ui8_i2cErrorFlag != 0;
-           if( ui8_error )
-           {
-             xEventGroupSetBits(gx_fault_EventGroup,fault_SENSOR);
-           }
-           else
-           {
-             xEventGroupClearBits(gx_fault_EventGroup,fault_SENSOR);
-
-           }
-           HIDE_Fault_Increment(fault_SENSOR,ui8_error);
-
-           // copy the read buffer into global variables
-           LidarLitev3HP_GetRawData(&s_LidarLitev3HPInst, &ui16_lidarAltitude, &gf_sensor_lidarAltitude);
-
-       #endif
     }
 
 #elif ( setup_SENSOR_NONE == (setup_SENSOR&setup_MASK_OPT1) )

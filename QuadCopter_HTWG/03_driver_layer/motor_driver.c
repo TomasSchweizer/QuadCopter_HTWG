@@ -39,7 +39,7 @@
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                      Local Defines                                                 */
 /* ---------------------------------------------------------------------------------------------------*/
-#define MOTOR_WRITE_TIMEOUT_MS              (0.4)
+#define MOTOR_WRITE_TIMEOUT_MS              ( 0.5 )
 
 #define event_MOTOR_WRITTEN                 ( 1 << 0 )
 
@@ -69,26 +69,19 @@ static uint8_t standardizeMotorDrawDisplay(uint16_t ui16);
 /*                                      Global Variables                                              */
 /* ---------------------------------------------------------------------------------------------------*/
 extern volatile EventGroupHandle_t gx_fault_EventGroup;
+extern volatile countEdges_handle_p gp_fault_coundEdges;
 
 /**
  * \brief	Array to store information of all motors
  * \note	Write access:	flight_task
  */
 volatile motor_Data_s gs_motor[motor_COUNT];
-/**
- * \brief	fault information for all Motors
- *
- * 			every motor has one bit. It will be set, if there
- *			is a fault, and cleared when the fault is gone.
- *			(see MOTOR_MAPPING for bit-Order)
- * \note	Write access:	write-ISR of the motor driver
- */
-volatile uint32_t 	  gui32_motor_fault = 0;
+
 
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                      Local Variables                                               */
 /* ---------------------------------------------------------------------------------------------------*/
-static volatile EventGroupHandle_t gx_motor_EventGroup = 0;
+volatile EventGroupHandle_t gx_motor_EventGroup;
 
 static workload_handle_p p_workHandle;
 /** \brief	Order of the motors */
@@ -213,8 +206,8 @@ void Motor_DrawDisplay(void)
     /* ---------------------------------------------------------------------------------------------------*/
 
     static uint8_t ui8_i2cWriteBuffer[8];                    // message for I2C
-    static volatile uint8_t ui8_i2cMotorState = MOTOR_READY;                  // to store which Motor to write & for I2C_MODE_... defines
-
+    static uint8_t ui8_i2cMotorState = MOTOR_READY;                  // to store which Motor to write & for I2C_MODE_... defines
+    static uint8_t ui8_i2cErrorFlag = 0;
     /* -----------------------------------------------------------------------------------------------*/
     /*                                      Procedure Definitions i2c mode                            */
     /* -----------------------------------------------------------------------------------------------*/
@@ -270,6 +263,7 @@ void Motor_DrawDisplay(void)
 	 */
 	void Motor_InitMotor(void)
 	{
+
         uint8_t i;
         for(i=0; i < motor_COUNT; i++)
         {
@@ -281,8 +275,8 @@ void Motor_DrawDisplay(void)
         	gs_motor[i].f_voltage     = 0.0;
         }
 
-		//To init the ESCs sent 0 as set-point */
-		Motor_OutputAll();						// write 0 speed to all motors
+		Motor_OutputAll();
+
 	}
 
 	/**
@@ -302,14 +296,14 @@ void Motor_DrawDisplay(void)
             ui8_i2cMotorState = MOTOR0_WRITE;
             Motor_i2cWrite(MOTOR0_WRITE);   // write to the first motor
         }
-	    else{
-
-	        ui8_i2cMotorState = MOTOR_READY;
+	    else
+	    {
+	        while(1); // Mistake
 	    }
 
-	    EventBits_t x_motorEventBits;
+	    volatile EventBits_t x_motorEventBits;
         //  Wait for sensor received event
-	    xEventGroupClearBits(gx_motor_EventGroup,event_MOTOR_WRITTEN);
+	    //xEventGroupClearBits(gx_motor_EventGroup, event_MOTOR_WRITTEN);
         x_motorEventBits = xEventGroupWaitBits(gx_motor_EventGroup,
                                               event_MOTOR_WRITTEN,
                                               pdTRUE,          // clear Bits before returning.
@@ -317,7 +311,7 @@ void Motor_DrawDisplay(void)
                                               MOTOR_WRITE_TIMEOUT_MS / portTICK_PERIOD_MS ); // maximum wait time
 
         // unblock because of timeout
-        uint8_t ui8_error=(event_MOTOR_WRITTEN & x_motorEventBits == 0) || gui32_motor_fault;
+        uint8_t ui8_error=(event_MOTOR_WRITTEN & x_motorEventBits == 0) || ui8_i2cErrorFlag;
         if( ui8_error )
         {
            // if any motor has a fault, set EventBit for motor fault
@@ -327,7 +321,7 @@ void Motor_DrawDisplay(void)
         {
            xEventGroupClearBits(gx_fault_EventGroup,fault_MOTOR);
         }
-        HIDE_Fault_Increment(fault_MOTOR,gui32_motor_fault);
+        HIDE_Fault_Increment(fault_MOTOR,ui8_error);
 
 	}
 
@@ -353,15 +347,14 @@ void Motor_DrawDisplay(void)
 		// is there  an error in I2C transmission?
 		if(ui8_status != I2CM_STATUS_SUCCESS)
 		{
-			// store which motor has a i2c fault
-			gui32_motor_fault |= ( 1 << ui8_motorMap[ui8_i2cMotorState] );
-			ui8_i2cMotorState = MOTOR_READY;
+
+		    //ui8_i2cMotorState = MOTOR_READY;
+		    //while(1);
+		    ui8_i2cErrorFlag = 1;
 		}
 		else
 		{
-			// store which motor hasn't a i2c fault
-			gui32_motor_fault &= ~( 1 << ui8_motorMap[ui8_i2cMotorState] );
-
+		    ui8_i2cErrorFlag = 0;
 		}
 
 		switch(ui8_i2cMotorState)
@@ -390,14 +383,15 @@ void Motor_DrawDisplay(void)
                 ui8_i2cMotorState = MOTOR_READY;
                 HIDE_Workload_EstimateStop(p_workHandle);
 
-            // fire eventBit to notify motor write has finished
-            BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-            if(pdFAIL==xEventGroupSetBitsFromISR(gx_motor_EventGroup, event_MOTOR_WRITTEN, &xHigherPriorityTaskWoken))
-                while(1);// you will come here, when configTIMER_QUEUE_LENGTH is full
-            else
-                portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
 
-            break;
+                // fire eventBit to notify motor write has finished
+                BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+                if(pdFAIL==xEventGroupSetBitsFromISR(gx_motor_EventGroup, event_MOTOR_WRITTEN, &xHigherPriorityTaskWoken))
+                    while(1);// you will come here, when configTIMER_QUEUE_LENGTH is full
+                else
+                    portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
+
+                break;
 
 
             }
