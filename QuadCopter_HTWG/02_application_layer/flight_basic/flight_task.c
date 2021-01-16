@@ -24,15 +24,17 @@
 #include "motor_driver.h"
 #include "sensor_driver.h"
 #include "display_driver.h"
+#include "debug_interface.h"
 
 // application
-#include "flight_control.h" // TODO changed for own PID controller test
+#include "flight_control.h"
 #include "flight_task.h"
 #include "receiver_task.h"		// GetSetPoints
-#include "fault.h"
+
 
 // utils
 #include "workload.h"
+#include "fault.h"
 #include "qc_math.h"
 
 // setup
@@ -42,7 +44,7 @@
 /*				Local Defines									*/
 /* ------------------------------------------------------------ */
 
-#define TASK_STACK_SIZE        	 		( 150 )       // Stack size in words
+#define TASK_STACK_SIZE        	 		( 250 )       // Stack size in words
 #define TASK_PERIOD_MS			 		( 2 )
 
 #define LANDING_TIME_MS					( 5000 )	  // time for the transition of the states LANDING -> RESTING
@@ -67,7 +69,6 @@ enum transitionState_e
 /*				Forward Declarations							*/
 /* ------------------------------------------------------------ */
 
-uint32_t       FlightTask_Init(void);
 static void    FlightTask(void *pvParameters);
 static void    StateFlying(EventBits_t x_faultEventBits);
 static void    StateLanding(EventBits_t x_faultEventBits);
@@ -81,8 +82,10 @@ static void    StateResting(void);
 /* ------------------------------------------------------------ */
 
 // used global variables
-extern volatile uint32_t 		  gui32_receiver_flightStabInput;
-extern volatile EventGroupHandle_t gx_fault_EventGroup;
+extern volatile uint32_t 		    gui32_receiver_flightStabInput;
+extern volatile EventGroupHandle_t  gx_fault_EventGroup;
+//extern volatile EventGroupHandle_t  gx_sensor_EventGroup;
+
 
 /**
  * \brief	set point values for flight stabilisation.
@@ -100,6 +103,9 @@ float gf_flight_setPoint[4];
  * \note	Write access:	flight_task
  */
 enum flight_state_e ge_flight_state=RESTING;
+
+
+countEdges_handle_p p_flight_countEdges;
 
 /* ------------------------------------------------------------ */
 /*				Local Variables									*/
@@ -146,8 +152,17 @@ uint32_t FlightTask_Init(void)
 	HIDE_Display_InsertDrawFun(FlightTaskDrawDisplay);
 	Sensor_InitPeriph();
 	HIDE_Display_InsertDrawFun(Sensor_DrawDisplay);
+	HIDE_Debug_USB_InsertComFun(HIDE_Sensor_SendDataOverUSB, 1);
     Motor_InitPeriph();
 	HIDE_Display_InsertDrawFun(Motor_DrawDisplay);
+	HIDE_Debug_USB_InsertComFun(HIDE_Motor_SendDataOverUSB, 0);
+
+	// insert pid
+    #if( setup_DEV_PID_TUNE )
+	HIDE_Debug_USB_InsertComFun(HIDE_Control_Debug_USB_GetPID, 0);
+	HIDE_Display_InsertDrawFun(HIDE_Control_PID_TUNE_DrawDisplay);
+    #endif
+
 
     TaskHandle_t  x_TaskHandle;
 	// Create the flight task.
@@ -174,9 +189,14 @@ uint32_t FlightTask_Init(void)
  */
 static void FlightTask(void *pvParameters)
 {
-
+    // That the ecs can get powerd up
+    vTaskDelay( 50 / portTICK_PERIOD_MS );
 	Motor_InitMotor();
+	// Delay 1ms just for safety that motor is initalized before sensors get initialized not necessary but nicer
+	vTaskDelay( 1/ portTICK_PERIOD_MS );
 	Sensor_InitSensor();
+
+
 	TickType_t  x_lastWakeTime;
 	EventBits_t x_faultEventBits;
 
@@ -282,7 +302,7 @@ static void StateFlying(EventBits_t x_faultEventBits)
 	ReceiverTask_GetSetPoints(&gf_flight_setPoint[0]);
 
 	// throttle back but with flight stabilization
-	if ( fault_MOTOR_OVER_CURRENT & x_faultEventBits )
+	if ( fault_MOTOR & x_faultEventBits )
 		if(gf_flight_setPoint[flight_THROTTLE]>MOTOR_OVERCURRENT_MAX_THROTTLE)
 			gf_flight_setPoint[flight_THROTTLE]=MOTOR_OVERCURRENT_MAX_THROTTLE;
 
@@ -356,11 +376,13 @@ static void StateResting(void)
     else
     {
         //TODO delete later besides Sensor_ReadFusion just for pID lib tests
-        ReceiverTask_GetSetPoints(&gf_flight_setPoint[0]);
+        //ReceiverTask_GetSetPoints(&gf_flight_setPoint[0]);
         Sensor_ReadAndFusion();
-        Control_FlightStabilisation();
-        Control_Mixer();
+
+        //Control_FlightStabilisation();
+        //Control_Mixer();
     }
+
 	Motor_StopAll();
 }
 
@@ -398,3 +420,6 @@ static uint8_t IsFlyingPossible(EventBits_t x_faultEventBits)
 {
 	return (((fault_MOTOR|fault_SENSOR|gui32_receiver_flightStabInput) & x_faultEventBits) == 0 );
 }
+
+
+

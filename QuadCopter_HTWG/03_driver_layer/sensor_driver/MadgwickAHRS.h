@@ -36,10 +36,7 @@
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                      API Procedure Definitions                                     */
 /* ---------------------------------------------------------------------------------------------------*/
-extern void MadgwickAHRSupdate(float ax, float ay, float az,
-                               float gx, float gy, float gz,
-                               float mx, float my, float mz,
-                               volatile float q[4], float dt);
+extern void MadgwickAHRSupdate(float ax, float ay, float az, float gx, float gy, float gz, float mx, float my, float mz, volatile float q[4], volatile float qDot[4], float dt);
 
 #endif  // __MADGWICKAHRS_H__
 

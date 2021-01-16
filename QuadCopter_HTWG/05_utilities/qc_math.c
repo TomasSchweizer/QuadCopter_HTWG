@@ -23,6 +23,8 @@
 #include <math.h>
 #include <float.h>
 
+
+#include "FreeRTOS.h"
 // own header file
 #include "qc_math.h"
 
@@ -76,15 +78,36 @@ uint32_t increment2Limit(uint32_t value, uint32_t limit) {
 void Math_StepPidController(math_pidController_s *ps_pidC)
 {
 
+    // copy input variable in local variable
     float f_input = *ps_pidC->pf_input;
+    // calculate error from setpoint and input
     float f_error = *ps_pidC->pf_setPoint - f_input;
+
+    // Anti derivative kick: derivative of error is equal to -derivative of input so instead
+    // + kD * derivative of error --> -kD * derivative of input
     float f_dInput = (f_input - *ps_pidC->pf_lastInput);
+
+    // Anti tuning changes: calculate ITerm = outputSum and take kI into the integral because of this
+    // the effect of the old errors doesn't get changed if kI is changed
     *ps_pidC->pf_outputSum += (ps_pidC->f_kI * f_error);
 
+    // Anti wind-up 1 (saturation): The pid stops integrating if max value is reached
+    if(*ps_pidC->pf_outputSum > ps_pidC->cf_maxOut)
+    {
+        *ps_pidC->pf_outputSum = ps_pidC->cf_maxOut;
+    }
+    else if(*ps_pidC->pf_outputSum < ps_pidC->cf_minOut)
+    {
+        *ps_pidC->pf_outputSum = ps_pidC->cf_minOut;
+    }
+
+    // Calculate output based on proportional gain part of PID and then add the intergral and
+    // derivative gain part
     float f_output = ps_pidC->f_kP *f_error;
+    f_output += *ps_pidC->pf_outputSum - ps_pidC->f_kD * f_dInput;
 
-    f_output += *ps_pidC->pf_outputSum - ps_pidC->f_kP * f_dInput;
-
+    // Anti wind-up 2: Also if the controller output is saturated eliminate
+    // the effect of P and D gain
     if(f_output > ps_pidC->cf_maxOut)
     {
         f_output = ps_pidC->cf_maxOut;
@@ -93,11 +116,11 @@ void Math_StepPidController(math_pidController_s *ps_pidC)
     {
         f_output = ps_pidC->cf_minOut;
     }
-    else
-    {
-        *ps_pidC->pf_output = f_output;
-    }
 
+    // Set the output value
+    *ps_pidC->pf_output = f_output;
+
+    // save last input value for derivative calculation
     *ps_pidC->pf_lastInput = f_input;
 }
 

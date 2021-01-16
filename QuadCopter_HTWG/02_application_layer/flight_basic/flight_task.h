@@ -21,6 +21,9 @@
 /*				   	Defines			    						*/
 /* ------------------------------------------------------------ */
 
+
+
+
 /** \brief	define to access ROLL in gf_flight_setPoint */
 #define flight_ROLL 		(0)		// do not change this
 /** \brief	define to access PITCH in gf_flight_setPoint */
@@ -56,6 +59,8 @@ extern uint32_t FlightTask_Init(void);
 
 extern float gf_flight_setPoint[4];
 extern enum flight_state_e ge_flight_state;
+
+
 
 /* ------------------------------------------------------------ */
 

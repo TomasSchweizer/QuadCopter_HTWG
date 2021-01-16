@@ -1,69 +1,63 @@
 //=====================================================================================================
-// @file motor_driver.h
+// @file ms5611_registers.h
 //=====================================================================================================
 //
-// @brief API to interact with the motors.
+// @brief List of used registers from MS5611
 //
 // Date                 Author                      Notes
-// @date 31/05/2016     @author Tobias Grimm        Implementation
-// @date 06/12/2020     @author Tomas Schweizer     Overall changes
+// @date 06/12/2020     @author Tomas Schweizer     Implementation
 //
 // Source:
-//
+// Data_Sheet MS5611 Barometer
 //
 //=====================================================================================================
 
-#ifndef __MOTOR_DRIVER_H__
-#define	__MOTOR_DRIVER_H__
+#ifndef MS5611_REGISTERS_H_
+#define MS5611_REGISTERS_H_
 
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                     Include File Definitions                                       */
 /* ---------------------------------------------------------------------------------------------------*/
 
-#include <stdint.h>
-
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                      Defines                                                       */
 /* ---------------------------------------------------------------------------------------------------*/
-/** \brief	Number of Motors */
-#define motor_COUNT		            ( 4 )
+// i2c address of the MS5611
+#define MS5611_ADDRESS                  0x77
+
+// MS5611 commands and registers
+#define MS5611_ADC_READ_COMMAND         0x00 // To read out conversion result
+#define MS5611_RESET                    0x1E //Needs to be called at start-up
+#define MS5611_PROM_READ                0xA2 // Needs to be read out to get 6 calibration values before start-up
+/*
+ * The calibration values lie at: (0xA0 is for the manufacturer only) 0xA2 to 0xAE
+ * In this application we read them in 2 uint8 values at a time
+ */
+
+// options
+#define MS5611_CONVER_PRESS_4096        0x48 // Conversion request for pressure with precision OSR=4096
+#define MS5611_CONVER_TEMP_4096         0x58 // Conversion request for temperature with precision OSR=4096
 
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                      Type Definitions                                              */
 /* ---------------------------------------------------------------------------------------------------*/
 
-// TODO changed to uint16 from uint8 fro all read data test if working
-/** \brief	structure to store information for one motor. */
-typedef struct motor_Data_s
-{
-        uint16_t ui16_setPoint;
-        float f_current;
-        float f_temperature;
-        float  f_rpm;
-        float f_voltage;
-        uint8_t  ui8_state;
-
-} motor_Data_s;
-
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                      Global Variables                                              */
 /* ---------------------------------------------------------------------------------------------------*/
-extern volatile motor_Data_s gs_motor[motor_COUNT];
-extern volatile uint32_t     gui32_motor_fault;
 
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                      API Procedure Definitions                                     */
 /* ---------------------------------------------------------------------------------------------------*/
-extern void Motor_InitPeriph(void);
-extern void Motor_InitMotor(void);
-extern void Motor_OutputAll(void);
-extern void Motor_StopAll(void);
-extern void Motor_DrawDisplay(void);
-extern void HIDE_Motor_SendDataOverUSB(void);
 
-
-#endif // __MOTOR_DRIVER_H__
+#endif /* MS5611_REGISTERS_H_ */
 
 //=====================================================================================================
 // End of file
 //=====================================================================================================
+
+
+
+
+
+

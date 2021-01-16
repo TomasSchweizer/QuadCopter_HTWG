@@ -25,17 +25,18 @@
 // drivers
 #include "remote_control.h"
 #include "sensor_driver.h"		// to require sensor calibration
-#include <display_driver.h>
+#include "display_driver.h"
+#include "debug_interface.h"
 
 // application
 #include "flight_task.h"
 #include "receiver_task.h"
-#include <fault.h>
+#include "fault.h"
 
 // utils
 #include "qc_math.h"
 #include "workload.h"
-#include <count_edges.h>
+#include "count_edges.h"
 
 /* ------------------------------------------------------------ */
 /*				Local Defines									*/
@@ -43,9 +44,9 @@
 
 #define RECEIVER_TASK_STACK_SIZE        100        // Stack size in words
 
-#define INPUT_REMOTE_CONTROL			fault_REMOTE_CONTROL
-#define INPUT_AUTOPILOT					fault_AUTOPILOT
-#define INPUT_TELEMETRIE				fault_TELEMETRIE
+#define INPUT_REMOTE_CONTROL			receiver_REMOTE_DATA
+#define INPUT_AUTOPILOT					receiver_AUTOPILOT_DATA
+#define INPUT_TELEMETRIE				receiver_TELEMETRIE_DATA
 
 /* ------------------------------------------------------------ */
 /*				Local Type Definitions							*/
@@ -55,17 +56,17 @@
 /*				Forward Declarations							*/
 /* ------------------------------------------------------------ */
 
-uint32_t ReceiverTask_Init(void);
+
 static void ReceiverTask(void *pvParameters);
-static uint32_t ChancheFlightInput(uint32_t ui32_inputDefine);
+static uint32_t ChangeFlightInput(uint32_t ui32_inputDefine);
 
 /* ------------------------------------------------------------ */
 /*				Global Variables								*/
 /* ------------------------------------------------------------ */
 
 // used global variables
-extern volatile EventGroupHandle_t gx_fault_EventGroup;
-extern volatile uint32_t 		  gui32_flight_setPoint[4];
+extern volatile EventGroupHandle_t   gx_fault_EventGroup;
+extern volatile uint32_t 		     gui32_flight_setPoint[4];
 
 /**
  * \brief	event bits to indicate if new
@@ -98,6 +99,7 @@ float gf_receiver_setPoint[4];
 /* ------------------------------------------------------------ */
 
 countEdges_handle_p p_receive_coundEdges;
+static uint8_t      ui8_calibrateRemoteAtStartFlag = 1;
 
 /* ------------------------------------------------------------ */
 /*				Procedure Definitions							*/
@@ -131,7 +133,8 @@ uint32_t ReceiverTask_Init(void)
 	HIDE_Display_InsertDrawFun(ReceiverTask_DrawDisplay);
 
 	#if	( setup_DEV_SUM_RECEIVS )
-		p_receive_coundEdges=CountEdges_Create(receiver_COUNT);
+	    HIDE_Display_InsertDrawFun(HIDE_Receive_DrawDisplay);
+		p_receive_coundEdges = CountEdges_Create(receiver_COUNT);
 		if( p_receive_coundEdges == math_NULL )
 			return(true);
 	#endif
@@ -199,14 +202,14 @@ static void ReceiverTask(void *pvParameters)
 	    	if( INPUT_REMOTE_CONTROL & gui32_receiver_flightStabInput )
 	    	{
 	    		// get data, is calibration required? & is the flight_state RESTING?
-	    		if(RemoteControl_GetData(& gf_receiver_setPoint[0]) && ge_flight_state==RESTING)
+	    		if((RemoteControl_GetData(&gf_receiver_setPoint[0]) && ge_flight_state==RESTING) || ui8_calibrateRemoteAtStartFlag)
 	    		{
+	    		    ui8_calibrateRemoteAtStartFlag = 0;
 	    			RemoteControl_Calibrate();		// calibrate remote control
 	    			Sensor_CalibrateRequire();		// require calibration for sensor (flight_task will do calibration algorithm)
 	    		}
 	    	}
 	    }
-
 
 		//
 		// autopilot data is there
@@ -215,7 +218,6 @@ static void ReceiverTask(void *pvParameters)
 	    {
 	    	HIDE_Receive_Increment(receiver_AUTOPILOT_DATA);
 	    }
-
 
 		//
 		// telemetrie data is there
@@ -226,7 +228,7 @@ static void ReceiverTask(void *pvParameters)
 	    	uint32_t ui32_inputDefine;
 	    	// read telemetrie and change e.g. the input mode for flight stabilisation
 	    	ui32_inputDefine = INPUT_REMOTE_CONTROL ;
-	    	if( ChancheFlightInput(ui32_inputDefine))
+	    	if( ChangeFlightInput(ui32_inputDefine))
 	    	{
 	    		// Change isn't allowed
 	    	}
@@ -247,7 +249,7 @@ static void ReceiverTask(void *pvParameters)
  * \return	false if change was allowed,
  *			true  else
  */
-static uint32_t ChancheFlightInput(uint32_t ui32_inputDefine)
+static uint32_t ChangeFlightInput(uint32_t ui32_inputDefine)
 {
 	EventBits_t x_faultEventBits;
 	x_faultEventBits = xEventGroupGetBits( gx_fault_EventGroup );

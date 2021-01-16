@@ -221,7 +221,7 @@
 	}
 
 	/**
-	 * \brief	Saves the time share of the Tasks evry time the alive Timer flows over in an seperate array.
+	 * \brief	Saves the time share of the Tasks every time the alive Timer flows over in an seperate array.
 	 */
 	void Workload_TimeSampelIntHandler( void )
 	{

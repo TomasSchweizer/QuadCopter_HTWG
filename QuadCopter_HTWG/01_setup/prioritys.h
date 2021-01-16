@@ -39,11 +39,12 @@
 // (0=high prio, 7=low prio)
 // only upper 3 bits are used in NVIC -> shift them up 5 times
 // prio 0 can never call API from ISR!!! (see below)
-#define priority_REMOTE_ISR				( 4 << 5 )
+#define priority_REMOTE_ISR				( 5 << 5 )
 #define priority_DEBUGGER_ISR			( 6 << 5 )
 #define priority_USB_ISR                ( 6 << 5 )
 #define priority_SENSOR_ISR      		( 3 << 5 )
-#define priority_MOTOR_ISR				( 5 << 5 )
+#define priority_SENSOR_ALT_ISR         ( 3 << 5 )
+#define priority_MOTOR_ISR				( 4 << 5 )
 
 // all ISRs with a priority number >= priority_MAX_API_CALL_INTERRUPT
 // can call FreeRTOS API functions from ISR

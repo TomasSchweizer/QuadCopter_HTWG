@@ -1,68 +1,111 @@
 //=====================================================================================================
-// @file motor_driver.h
+// @file sensor_mpu9265.h
 //=====================================================================================================
 //
-// @brief API to interact with the motors.
+// @brief Implementation of a mpu9265 function library
 //
 // Date                 Author                      Notes
-// @date 31/05/2016     @author Tobias Grimm        Implementation
-// @date 06/12/2020     @author Tomas Schweizer     Overall changes
+// @date 06/12/2020     @author Tomas Schweizer     Overall changes to fit to application
 //
 // Source:
-//
+// TivaWare SensorLib
 //
 //=====================================================================================================
 
-#ifndef __MOTOR_DRIVER_H__
-#define	__MOTOR_DRIVER_H__
+#ifndef __SENSOR_MPU9265_H__
+#define __SENSOR_MPU9265_H_
 
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                     Include File Definitions                                       */
 /* ---------------------------------------------------------------------------------------------------*/
-
 #include <stdint.h>
+
+#include "sensorlib/i2cm_drv.h"
 
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                      Defines                                                       */
 /* ---------------------------------------------------------------------------------------------------*/
-/** \brief	Number of Motors */
-#define motor_COUNT		            ( 4 )
 
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                      Type Definitions                                              */
 /* ---------------------------------------------------------------------------------------------------*/
-
-// TODO changed to uint16 from uint8 fro all read data test if working
-/** \brief	structure to store information for one motor. */
-typedef struct motor_Data_s
+// Struct for MPU9265 and AK8963 raw data
+typedef struct
 {
-        uint16_t ui16_setPoint;
-        float f_current;
-        float f_temperature;
-        float  f_rpm;
-        float f_voltage;
-        uint8_t  ui8_state;
+    int16_t i16_accX;
+    int16_t i16_accY;
+    int16_t i16_accZ;
+    int16_t i16_gyroX;
+    int16_t i16_gyroY;
+    int16_t i16_gyroZ;
+    int16_t i16_magX;
+    int16_t i16_magY;
+    int16_t i16_magZ;
 
-} motor_Data_s;
+} MPU9265_AK8963_rawData_s;
+
+// Struct for Magnetometer AK8975_s integrated in MPU9250
+typedef struct
+{
+    // I2c master instance
+    tI2CMInstance *ps_i2cMastInst;
+
+    // I2c device address
+    uint8_t ui8_AK8693Address;
+
+    // State of the AK8963
+    uint8_t ui8_AK8963State;
+
+    uint8_t pui8_AK8963ReadBuffer[8];
+
+    uint8_t pui8_AK8963WriteBuffer[8];
+
+    // pointer to the function which is called when request is finished
+    tSensorCallback *fp_AK8963Callback;
+
+    void *p_AK8963CallbackData;
+
+} AK8963_s;
+
+
+// Struct for MPU925x
+typedef struct
+{
+    // I2c master instance
+    tI2CMInstance *ps_i2cMastInst;
+
+    // Instannce of the Magnetometer
+    AK8963_s s_AK8963Inst;
+
+    // I2c Address of MPU9250
+    uint8_t ui8_MPU9265Address;
+
+    // State of the MPU9265
+    uint8_t ui8_MPU9265State;
+
+    uint8_t pui8_MPU9265ReadBuffer[24];
+
+    uint8_t pui8_MPU9265WriteBuffer[8];
+
+    tSensorCallback *fp_MPU9265Callback;
+
+    void *p_MPU9265CallbackData;
+} MPU9265_s;
 
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                      Global Variables                                              */
 /* ---------------------------------------------------------------------------------------------------*/
-extern volatile motor_Data_s gs_motor[motor_COUNT];
-extern volatile uint32_t     gui32_motor_fault;
 
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                      API Procedure Definitions                                     */
 /* ---------------------------------------------------------------------------------------------------*/
-extern void Motor_InitPeriph(void);
-extern void Motor_InitMotor(void);
-extern void Motor_OutputAll(void);
-extern void Motor_StopAll(void);
-extern void Motor_DrawDisplay(void);
-extern void HIDE_Motor_SendDataOverUSB(void);
+extern uint8_t MPU9265_Init(MPU9265_s *ps_inst, tI2CMInstance *ps_I2CMInst, uint8_t ui8_MPU9265Address,
+                            tSensorCallback *fp_MPU9265Callback, void *p_MPU9265CallbackData);
+extern uint8_t MPU9265_ReadData(MPU9265_s *ps_inst, tSensorCallback *fp_MPU9265Callback, void *p_MPU9265CallbackData);
 
+extern void  MPU9265_AK8963_GetRawData(MPU9265_s *ps_inst, MPU9265_AK8963_rawData_s *s_rawData);
 
-#endif // __MOTOR_DRIVER_H__
+#endif /* _SENSOR_MPU925X_H_ */
 
 //=====================================================================================================
 // End of file

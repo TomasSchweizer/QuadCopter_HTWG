@@ -1,69 +1,72 @@
 //=====================================================================================================
-// @file motor_driver.h
+// @file LidarLitev3HP_register.h
 //=====================================================================================================
 //
-// @brief API to interact with the motors.
+// @brief List of used registers from LidarLite_v3HP
 //
 // Date                 Author                      Notes
-// @date 31/05/2016     @author Tobias Grimm        Implementation
-// @date 06/12/2020     @author Tomas Schweizer     Overall changes
+// @date 24/12/2020     @author Tomas Schweizer     Implementation
 //
 // Source:
-//
+// Data sheet LidarLite_v3HP
 //
 //=====================================================================================================
 
-#ifndef __MOTOR_DRIVER_H__
-#define	__MOTOR_DRIVER_H__
+#ifndef LIDARLITEV3HP_REGISTER_H_
+#define LIDARLITEV3HP_REGISTER_H_
+
 
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                     Include File Definitions                                       */
 /* ---------------------------------------------------------------------------------------------------*/
 
-#include <stdint.h>
-
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                      Defines                                                       */
 /* ---------------------------------------------------------------------------------------------------*/
-/** \brief	Number of Motors */
-#define motor_COUNT		            ( 4 )
+// 2 i2c addresses one for write and  one for read of the LidarLite_v3HP
+#define LIDARLITEV3HP_ADDRESS                       0x62
+
+// control registers
+#define LIDARLITEv3HP_ACQ_COMMAND                   0x00
+#define LIDARLITEv3HP_STATUS                        0x01
+#define LIDARLITEv3HP_SIG_COUNT_VAL                 0x02
+#define LIDARLITEv3HP_ACQ_CONFIG_REG                0x04
+#define LIDARLITEv3HP_REF_COUNT_VAL                 0x12
+#define LIDARLITEv3HP_THRESHOLD_BYPASS              0x1C
+// read registers
+#define LIDARLITEv3HP_DISTANCE_HIGH_BYTE            0x0f
+#define LIDARLITEv3HP_DISTANCE_LOW_BYTE             0x10
+
+// bit values for balanced mode !!! is used !!!
+#define LIDARLITEv3HP_SIGCOUNTVAL_BALANCED          0x80
+#define LIDARLITEv3HP_ACQCONFIGREG_BALANCED         0x08
+#define LIDARLITEv3HP_REFCOUNTVAL_BALANCED          0x05
+#define LIDARLITEv3HP_THRESHOLDBYPASS_BALANCED      0x00
+
+// bit for short range high speed
+#define LIDARLITEv3HP_SIGCOUNTVAL_SPEED             0x1D
+#define LIDARLITEv3HP_ACQCONFIGREG_SPEED            0x08
+#define LIDARLITEv3HP_REFCOUNTVAL_SPEED             0x03
+#define LIDARLITEv3HP_THRESHOLDBYPASS_SPEED         0x00
+
+// bit to initiate a measurement
+#define LIDARLITEv3HP_ACQ_COMMAND_INIT_MEAS         0x01
 
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                      Type Definitions                                              */
 /* ---------------------------------------------------------------------------------------------------*/
 
-// TODO changed to uint16 from uint8 fro all read data test if working
-/** \brief	structure to store information for one motor. */
-typedef struct motor_Data_s
-{
-        uint16_t ui16_setPoint;
-        float f_current;
-        float f_temperature;
-        float  f_rpm;
-        float f_voltage;
-        uint8_t  ui8_state;
-
-} motor_Data_s;
-
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                      Global Variables                                              */
 /* ---------------------------------------------------------------------------------------------------*/
-extern volatile motor_Data_s gs_motor[motor_COUNT];
-extern volatile uint32_t     gui32_motor_fault;
 
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                      API Procedure Definitions                                     */
 /* ---------------------------------------------------------------------------------------------------*/
-extern void Motor_InitPeriph(void);
-extern void Motor_InitMotor(void);
-extern void Motor_OutputAll(void);
-extern void Motor_StopAll(void);
-extern void Motor_DrawDisplay(void);
-extern void HIDE_Motor_SendDataOverUSB(void);
-
-
-#endif // __MOTOR_DRIVER_H__
+#endif /* LIDARLITEV3HP_REGISTER_H_ */
 
 //=====================================================================================================
 // End of file
 //=====================================================================================================
+
+

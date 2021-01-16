@@ -16,6 +16,7 @@
 // Select Addons for the Quadcopter (1 -> include, 0 -> exclude)
 #define setup_QC_BASIC  				( 1 )					// basic setup to fly with remote control
 #define setup_QC_DEVELOPMENT  			( 1 )					// enable development addons (see below)
+#define setup_QC_ALTITUDE_HOLD          ( 1 )
 #define setup_QC_AUTONOMOUS_NAVIGATION  ( 0 )					// not implemented yet
 #define setup_QC_KAMERA_ADDON			( 0 )					// not implemented yet
 
@@ -28,13 +29,19 @@
 	#define setup_DEV_SUM_FAULTS		( 1 )					// every fault   eventBit gets a name & every time a fault   event happens, increment a counter (gp_fault_coundEdges)
 	#define setup_DEV_SUM_RECEIVS		( 1 )					// every receive eventBit gets a name & every time a receive event happens, increment a counter
 	#define setup_DEV_DISPLAY			( 1 )					// show workloads, sumFaults, sumReceivs on Display (but only when the desired setup_DEV=1)
-	#define setup_DEV_PID_TUNE			( 1 )					// read debug interface for PID values (this can crash with write commands on the trace interface)
+	#define setup_DEV_PID_TUNE			( 0 )					// read debug interface for PID values (this can crash with write commands on the trace interface)
 	#define setup_DEV_DEBUG_PINS		( 1 )					// enable debug pins
     #define setup_DEV_DEBUG_USB         ( 1 )                   // enable debug options over USB
 	#define setup_DEV_COMMANDS			( 0 )					// enable HIDE-function macros to insert into the command Queue Task
 
 #endif
 
+#if setup_QC_ALTITUDE_HOLD
+
+    #define setup_ALT_BARO              ( 1 )
+    #define setup_ALT_LIDAR             ( 1 )
+
+#endif
 /* ------------------------------------------------------------ */
 /*				Select hardware setup			    			*/
 /* ------------------------------------------------------------ */
@@ -62,12 +69,7 @@
 
 // Select the Mode for the sensor (others will be exclude from build)
 #define setup_SENSOR_NONE  				( 0x00000001 )			// all sensor functions will do nothing
-#define setup_SENSOR_SPI  				( 0x00000002 )			// not portet from Eckstein
-#define setup_SENSOR_I2C  				( 0x00000003 )			// tested
-//#define setup_SENSOR_INV_ROLL			( 0x00000100 )			// invert roll  signal
-//#define setup_SENSOR_INV_PITCH			( 0x00000200 )			// invert pitch signal
-//#define setup_SENSOR_INV_YAW			( 0x00000400 )			// invert yaw 	signal
-//#define setup_SENSOR_SWOP_ROLL_PITCH	( 0x00000800 )			// swop roll and pitch signals
+#define setup_SENSOR_I2C  				( 0x00000002 )			// tested
 #define setup_SENSOR      				( setup_SENSOR_I2C)
 
 // Select the Mode for the display (others will be exclude from build, & all display functions use HIDE!)
@@ -80,7 +82,6 @@
 #define setup_DEBUG_NONE  				( 0x00000001 )					// all debug interface functions will do nothing and consume no memmory (HIDE)
 #define setup_DEBUG_UART  				( 0x00000002 )					// tested
 #define setup_DEBUG_USB  				( 0x00000003 )					// TODO debug and code changes
-#define setup_DEBUG_UART_USB            ( 0x00000004 )                  // TODO test to implememt UART and USB at the same time change with to masks
 #define setup_DEBUG      				( setup_DEBUG_USB )
 
 #endif // __QC_SETUP_H__

@@ -1,69 +1,66 @@
 //=====================================================================================================
-// @file motor_driver.h
+// @file ak8963_registers.h
 //=====================================================================================================
 //
-// @brief API to interact with the motors.
+// @brief List of used registers from ak8963 magnotemeter
 //
 // Date                 Author                      Notes
-// @date 31/05/2016     @author Tobias Grimm        Implementation
-// @date 06/12/2020     @author Tomas Schweizer     Overall changes
+// @date 06/12/2020     @author Tomas Schweizer     Implementation
 //
 // Source:
-//
+// TivaWare SensorLib
 //
 //=====================================================================================================
-
-#ifndef __MOTOR_DRIVER_H__
-#define	__MOTOR_DRIVER_H__
+#ifndef AK8963_REGISTERS_H_
+#define AK8963_REGISTERS_H_
 
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                     Include File Definitions                                       */
 /* ---------------------------------------------------------------------------------------------------*/
 
-#include <stdint.h>
-
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                      Defines                                                       */
 /* ---------------------------------------------------------------------------------------------------*/
-/** \brief	Number of Motors */
-#define motor_COUNT		            ( 4 )
+// i2c address
+#define AK8963_ADDRESS              0x0C
+
+// registers
+#define AK8963_HXL                  0x03        // X-axis LSB output register
+#define AK8963_HXH                  0x04        // X-axis MSB output register
+#define AK8963_HYL                  0x05        // Y-axis LSB output register
+#define AK8963_HYH                  0x06        // Y-axis MSB output register
+#define AK8963_HZL                  0x07        // Z-axis LSB output register
+#define AK8963_HZH                  0x08        // Z-axis MSB output register
+#define AK8963_CNTL1                0x0A        // Control register
+#define AK8963_CNTL2                0x0B        // Control 2 register
+#define AK8963_ASTC                 0x0C        // Self-test register
+#define AK8963_ASAX                 0x10        // X-axis sensitivity register
+#define AK8963_ASAY                 0x11        // Y-axis sensitivity register
+#define AK8963_ASAZ                 0x12        // Z-axis sensitivity register
+
+// bits in registers
+#define AK8963_CNTL2_SRST           0x01        // Register reset
+#define AK8963_CNTL_MODE_CONT_2     0x06        // Continuous measurement mode 2 (100Hz)
+#define AK8963_CNTL_MODE_SELF_TEST  0x08        // Self-test mode
+#define AK8963_CNTL_BITM_16BIT      0x10        // 16-bit output
+#define AK8963_CNTL_MODE_FUSE_ROM   0x0F        // Fuse ROM access mode
+#define AK8963_ASTC_SELF            0x40        // Generate magnetic field for self-test
 
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                      Type Definitions                                              */
 /* ---------------------------------------------------------------------------------------------------*/
 
-// TODO changed to uint16 from uint8 fro all read data test if working
-/** \brief	structure to store information for one motor. */
-typedef struct motor_Data_s
-{
-        uint16_t ui16_setPoint;
-        float f_current;
-        float f_temperature;
-        float  f_rpm;
-        float f_voltage;
-        uint8_t  ui8_state;
-
-} motor_Data_s;
-
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                      Global Variables                                              */
 /* ---------------------------------------------------------------------------------------------------*/
-extern volatile motor_Data_s gs_motor[motor_COUNT];
-extern volatile uint32_t     gui32_motor_fault;
 
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                      API Procedure Definitions                                     */
 /* ---------------------------------------------------------------------------------------------------*/
-extern void Motor_InitPeriph(void);
-extern void Motor_InitMotor(void);
-extern void Motor_OutputAll(void);
-extern void Motor_StopAll(void);
-extern void Motor_DrawDisplay(void);
-extern void HIDE_Motor_SendDataOverUSB(void);
 
 
-#endif // __MOTOR_DRIVER_H__
-
+#endif /* AK8963_REGISTERS_H_ */
 //=====================================================================================================
 // End of file
 //=====================================================================================================
+

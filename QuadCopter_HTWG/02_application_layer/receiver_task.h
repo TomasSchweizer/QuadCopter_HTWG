@@ -28,16 +28,15 @@
 // Comm-Task waits for these bits and handles/answers them
 // Bit order is irrelevant (but in range 0 ... fault_COUNT-1)
 /** \brief	maximum Number of used receiver eventBits (max 24) */
-#define receiver_COUNT						( 4 )
+#define receiver_COUNT						( 3 )
 /** \brief	REMOTE_DATA receiver eventBit */
 #define receiver_REMOTE_DATA				( 1 << 0 )
 /** \brief	AUTOPILOT_DATA	 receiver eventBit */
 #define receiver_AUTOPILOT_DATA				( 1 << 1 )
 /** \brief	TELEMETRIE_DATA receiver eventBit */
 #define receiver_TELEMETRIE_DATA			( 1 << 2 )
-/** \brief	SENSOR_DATA receiver eventBit
- * 	\note	receiver_task doesn't wait for this bit (flight_task wait for it) */
-#define receiver_SENSOR_DATA				( 1 << 3 )
+
+
 
 /* ------------------------------------------------------------ */
 /*				   	Type Definitions			    			*/

@@ -41,11 +41,8 @@
 // Maximum values remote control
 #define ROLL_MAX		(15.0f*math_PI/180.0f)				// [-max...+max] [rad]
 #define PITCH_MAX		(15.0f*math_PI/180.0f)				// [-max...+max] [rad]
-#define YAW_MAX			( 10.0f*math_PI/180.0f)				// [-max...+max] [rad/s] // TODO make max higher
+#define YAW_MAX			(10.0f*math_PI/180.0f)				// [-max...+max] [rad/s] // TODO make max higher
 #define THROTTLE_MAX	(1.0f)							// [0   ...+max] []
-
-// Limits a value between the given borders low and high
-#define limitValue(value, low, high) ((value)<(low)?(low):((value)>(high)?(high):(value))) // TODO bring to qc_math
 
 /** \brief	Number of Channles in the CPPM signal */
 #define remote_CPPM_CHANNELS 		  ( 6 )
@@ -54,13 +51,6 @@
 /*				Local Type Definitions							*/
 /* ------------------------------------------------------------ */
 
-/* ------------------------------------------------------------ */
-/*				Forward Declarations							*/
-/* ------------------------------------------------------------ */
-
-uint8_t RemoteControl_GetData(volatile float f_receiverSetPoint[]);
-void 	RemoteControl_Init(void);
-void	RemoteControl_Calibrate(void);
 
 /* ------------------------------------------------------------ */
 /*				Global Variables								*/
@@ -82,7 +72,7 @@ const float f_maxValues[] = {ROLL_MAX, PITCH_MAX, YAW_MAX, THROTTLE_MAX};
 /*				Select the Mode									*/
 /* ------------------------------------------------------------ */
 
-#if   ( setup_REMODE_CPPM == (setup_REMOTE&setup_MASK_OPT1)) || DOXYGEN
+#if ( setup_REMODE_CPPM == (setup_REMOTE&setup_MASK_OPT1)) || DOXYGEN
 
 	/* ------------------------------------------------------------ */
 	/*				Include File Definitions						*/
@@ -122,9 +112,8 @@ const float f_maxValues[] = {ROLL_MAX, PITCH_MAX, YAW_MAX, THROTTLE_MAX};
 	//
 	#define REMOTE_PIN_CPPM 							(periph_REMOTE_PIN_CPPM & periph_MASK_PIN)
 	#define REMOTE_GPIO_PORT_BASE						(periph_REMOTE_PIN_CPPM & periph_MASK_PORT)
-	#if ( REMOTE_GPIO_PORT_BASE == GPIO_PORTC_BASE )
-		#define REMOTE_SYSCTL_PERIPH_GPIO				SYSCTL_PERIPH_GPIOC
-	#elif ( REMOTE_GPIO_PORT_BASE == GPIO_PORTE_BASE )
+
+    #if ( REMOTE_GPIO_PORT_BASE == GPIO_PORTE_BASE )
 		#define REMOTE_SYSCTL_PERIPH_GPIO				SYSCTL_PERIPH_GPIOE
 	#else
 		#error	ERROR implement the defines above here
@@ -159,7 +148,7 @@ const float f_maxValues[] = {ROLL_MAX, PITCH_MAX, YAW_MAX, THROTTLE_MAX};
 	/*				Local Variables									*/
 	/* ------------------------------------------------------------ */
 
-	 int32_t i32_receiverData[remote_CPPM_CHANNELS];
+	static int32_t i32_receiverData[remote_CPPM_CHANNELS];
 	static int32_t i32_offsetData[4];
 	static const uint16_t ui16_cppmMap[remote_CPPM_CHANNELS] = CPPM_ORDER;
 
@@ -201,7 +190,7 @@ const float f_maxValues[] = {ROLL_MAX, PITCH_MAX, YAW_MAX, THROTTLE_MAX};
 				if (ui16_loopCounter<remote_CPPM_CHANNELS-1)
 				{
 					// save the time value for the current Channel
-					i32_receiverData[ ui16_cppmMap[ui16_loopCounter] ] = ui16_diffTime;
+					i32_receiverData[ui16_cppmMap[ui16_loopCounter] ] = ui16_diffTime;
 					ui16_loopCounter++;
 				}
 				// last element of the Frame
@@ -284,12 +273,12 @@ const float f_maxValues[] = {ROLL_MAX, PITCH_MAX, YAW_MAX, THROTTLE_MAX};
 			if(i==remote_THROTTLE)
 			{
 				help=help/CPPM_MIN_MAX_RANGE*f_maxValues[i];			// scale to [0...max]
-				help=limitValue(help, 0, f_maxValues[i]);				// limit to [0...max]
+				help=math_LIMIT(help, 0, f_maxValues[i]);				// limit to [0...max]
 			}
 			else
 			{
 				help=help/CPPM_MIN_MAX_RANGE_HALF*f_maxValues[i];		// scale to [-max...max]
-				help=limitValue(help, -f_maxValues[i], f_maxValues[i]); // limit to [-max...max]
+				help=math_LIMIT(help, -f_maxValues[i], f_maxValues[i]); // limit to [-max...max]
 			}
 			f_receiverSetPoint[i]=help;
 		}
@@ -330,12 +319,12 @@ const float f_maxValues[] = {ROLL_MAX, PITCH_MAX, YAW_MAX, THROTTLE_MAX};
 	void RemoteControl_Init(void)
 	{
 
-		ROM_IntPrioritySet(periph_REMOTE_INT,   priority_REMOTE_ISR);
+		ROM_IntPrioritySet(periph_REMOTE_INT, priority_REMOTE_ISR);
 		ROM_SysCtlPeripheralEnable(REMOTE_SYSCTL_PERIPH_GPIO);
 		ROM_GPIOPinTypeGPIOInput(REMOTE_GPIO_PORT_BASE,REMOTE_PIN_CPPM );
 		GPIOIntClear(REMOTE_GPIO_PORT_BASE, REMOTE_PIN_CPPM );				// P isr reset
 
-		// Pins isr rising edge
+		// Pins is rising edge
 		ROM_GPIOIntTypeSet(REMOTE_GPIO_PORT_BASE, REMOTE_PIN_CPPM , GPIO_RISING_EDGE);
 
 		// Pin ints frei
@@ -345,7 +334,7 @@ const float f_maxValues[] = {ROLL_MAX, PITCH_MAX, YAW_MAX, THROTTLE_MAX};
 		ROM_IntEnable(periph_REMOTE_INT);
 
 		// Extra Timer für CPPM Pulsmessung
-		// Timer1 und dort Timer A
+		// Timer2 und dort Timer A
 		// als 16 bit runter zählen, da beim hochzählen das Prescale nicht funktioniert ( TI abhängig )
 
 		// timer 1 aktivieren
