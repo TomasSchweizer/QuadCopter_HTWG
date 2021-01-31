@@ -293,12 +293,14 @@ void Motor_DrawDisplay(void)
         {
             HIDE_Workload_EstimateStart(p_workHandle);
 
+            // TODO change back to MOTOR0_WRITE
             ui8_i2cMotorState = MOTOR0_WRITE;
             Motor_i2cWrite(MOTOR0_WRITE);   // write to the first motor
         }
 	    else
 	    {
-	        while(1); // Mistake
+	        // TODO uncomment after tests
+	        //while(1); // Mistake
 	    }
 
 	    volatile EventBits_t x_motorEventBits;
@@ -359,11 +361,12 @@ void Motor_DrawDisplay(void)
 
 		switch(ui8_i2cMotorState)
 		{
+		    // TODO change back just for balancing motors and pid tuning always after motor back to ready state
 
             case MOTOR0_WRITE:
             {
                 ui8_i2cMotorState = MOTOR1_WRITE;
-                Motor_i2cWrite(ui8_motorMap[ui8_i2cMotorState]);
+                Motor_i2cWrite(MOTOR1_WRITE);
                 break;
             }
             case MOTOR1_WRITE:
@@ -420,7 +423,7 @@ void Motor_DrawDisplay(void)
 		uint32_t ui32_speed = (uint32_t) gs_motor[ui8_motorNr].ui16_setPoint;	// speed in größere variiablen laden
 
 		// TODO just for usb debugging
-		ui16_motorDataUsb[ui8_motorNr] = ui32_speed;
+		//ui16_motorDataUsb[ui8_motorNr] = ui32_speed;
 
 		// Wertebereich von 1000..2000us mappen auf
 		// bei mode:2047   -> 0..2047
@@ -432,7 +435,7 @@ void Motor_DrawDisplay(void)
 		ui32_speed = (ui32_speed * ESC_DATA_SIZE) / 0xFFFF;  //0..2047 oder 0..255
 
 		// TODO delete later send motor data over USB
-		ui16_motorDataUsb[ui8_motorNr] = (uint16_t) ui32_speed;
+		//ui16_motorDataUsb[ui8_motorNr] = (uint16_t) ui32_speed;
 
 		if(ESC_DATA_SIZE == 255)
 		{

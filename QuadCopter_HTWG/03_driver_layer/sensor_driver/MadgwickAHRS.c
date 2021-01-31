@@ -74,6 +74,7 @@ static uint16_t ui16_counterStartUpConvergence = 0;
  *
  *  \param  q         ->       takes the global gf_sensor_attitudeQuaternion
  *                             and overwrites it with the newly calculated one
+ *  \param  qDot      ->       takes the global gf_sensor_attitudeQuaternion
  *  \param  dt        ->       sample time [0.002ms normaly]
  *
  */
@@ -81,7 +82,7 @@ void MadgwickAHRSupdate(float ax, float ay, float az, float gx, float gy, float 
 {
    float beta;
 
-   if(ui16_counterStartUpConvergence < 1000)
+   if(ui16_counterStartUpConvergence < 2500)
    {
        beta = 0.6;
        ui16_counterStartUpConvergence++;

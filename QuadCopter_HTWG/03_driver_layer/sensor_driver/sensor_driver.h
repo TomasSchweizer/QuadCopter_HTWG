@@ -39,6 +39,7 @@ extern volatile float gf_sensor_attitudeQuaternion[4];
 extern volatile float gf_sensor_dotAttitudeQuaternion[4];
 extern float gf_sensor_fusedAngles[3];
 extern float gf_sensor_angularVelocity[3];
+extern float gf_sensor_gyroAngularVelocity[3];
 extern float gf_sensor_pressure;
 extern float gf_sensor_baroAltitude;
 extern float gf_sensor_lidarAltitude;

@@ -75,7 +75,7 @@
 /*					Procedure Declarations						*/
 /* ------------------------------------------------------------ */
 
-#if	( (setup_DEBUG_UART == (setup_DEBUG&setup_MASK_OPT1)) || (setup_DEBUG_UART_USB == (setup_DEBUG&setup_MASK_OPT1)) ) || DOXYGEN
+#if	( (setup_DEBUG_UART == (setup_DEBUG&setup_MASK_OPT1)) ) || DOXYGEN
 
 	extern void HIDE_Debug_InterfaceInit(void);
 	extern void HIDE_Debug_InterfaceGet(int32_t* i32_buff);
@@ -90,7 +90,7 @@
 #endif
 
 // TODO new implementation of USB test and comment
-#if	( (setup_DEBUG_USB == (setup_DEBUG&setup_MASK_OPT1)) || (setup_DEBUG_UART_USB == (setup_DEBUG&setup_MASK_OPT1)) ) || DOXYGEN
+#if	( (setup_DEBUG_USB == (setup_DEBUG&setup_MASK_OPT1)) ) || DOXYGEN
 
 	extern void HIDE_Debug_USB_InterfaceInit(void);
 	extern void HIDE_Debug_USB_InsertComFun(usb_com_fp fp_com, uint8_t insert);
@@ -102,10 +102,10 @@
 #else
 
     #define HIDE_Debug_USB_InterfaceInit()                                          // this define will be kicked off from the preprocessor
-    #define HIDE_Debug_USB_InsertComFun(fp_com)
+    #define HIDE_Debug_USB_InsertComFun(fp_com, insert)
     #define HIDE_Debug_USB_Com()
-    #define HIDE_Debug_USB_InterfaceSend(pv_txBuffer, ui32_count, ui8_txDataType);
-    #define HIDE_Debug_InterfaceSend(pid_values_buffer[12]);
+    #define HIDE_Debug_USB_InterfaceSend(pv_txBuffer, ui32_count, ui8_txDataType)
+    #define HIDE_Debug_USB_InterfaceReceive(pid_values_buffer)
 
 #endif
 

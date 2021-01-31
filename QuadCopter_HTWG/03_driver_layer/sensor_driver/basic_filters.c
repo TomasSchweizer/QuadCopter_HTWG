@@ -55,3 +55,37 @@ void highPassArray(struct hp_a_struct *hp){
 	}
 
 }
+
+
+
+
+void notchFilterArray(float *pf_sensorData, struct notch_a_s *nf)
+{
+
+    int i;
+
+    for(i=0; i<NF_ARRAY_SIZE; i++)
+    {
+
+        nf->x[i] = pf_sensorData[i+3];
+
+        nf->y[i] = (nf->b0 * nf->x[i]) + (nf->b1 * nf->x1[i]) + (nf->b2 * nf->x2[i])
+                        - (nf->a1 * nf->y1[i]) - (nf->a2 * nf->y2[i]);
+
+        nf->y2[i] = nf->y1[i];
+        nf->y1[i] = nf->y[i];
+
+        nf->x2[i] = nf->x1[i];
+        nf->x1[i] = nf->x[i];
+
+        pf_sensorData[i+3] = nf->y[i];
+
+    }
+
+
+
+
+}
+
+
+

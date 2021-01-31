@@ -30,6 +30,16 @@
 #define periph_SPLIT_PORT_PIN(debug_PIN) 	debug_PIN&periph_MASK_PORT,debug_PIN&periph_MASK_PIN
 #define periph_NONE			0xFFFFFFFF
 
+
+//
+// Watchdog peripherals
+//
+#if ( setup_WATCHDOG == (setup_WATCHDOG_ACTIVE&setup_MASK_OPT1) )
+
+    #define periph_WATCHDOG_INT                 INT_WATCHDOG // interrupt for wachdog
+
+#endif
+
 //
 //  Motor Peripherals
 //

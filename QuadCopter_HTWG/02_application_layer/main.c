@@ -27,6 +27,7 @@
 #include "flight_task.h"
 #include "receiver_task.h"
 #include "command_task.h"
+#include "watchdog.h"
 
 // utils
 #include "workload.h"
@@ -51,8 +52,6 @@ int main(void)
 	// Wait for clock to stabilize
 	ROM_SysCtlDelay(ROM_SysCtlClockGet() / 12);
 
-	//TODO just debugging
-
 
 	//
 	//	Default Applications
@@ -75,11 +74,14 @@ int main(void)
 
 		if(FlightTask_Init())
 			while(1);
-
 	#endif
+
 
     // Enable All Interrupts
     ROM_IntMasterEnable();
+
+    // Initialize and start watchdog deactivate for debugging
+    //Watchdog_Init();
 
     // Start the scheduler.  This should not return.
     vTaskStartScheduler();

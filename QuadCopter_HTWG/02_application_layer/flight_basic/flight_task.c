@@ -49,10 +49,10 @@
 
 #define LANDING_TIME_MS					( 5000 )	  // time for the transition of the states LANDING -> RESTING
 
-#define MOTOR_OVERCURRENT_MAX_THROTTLE	( 0.5f )	  // throttle goes from [0...1]
-#define THROTTLE_LANDING				( 0.25f)	  // throttle goes from [0...1]
-#define THRESHOLD_FLYING_REQUIRED		( 0.2f )	  // throttle goes from [0...1]
-#define THRESHOLD_FLYING_NOT_REQUIRED	( 0.1f )	  // throttle goes from [0...1]
+#define MOTOR_OVERCURRENT_MAX_THROTTLE	(  0.0f )	  // throttle goes from [-1...1]
+#define THROTTLE_LANDING				( -0.6f)	  // throttle goes from [-1...1]
+#define THRESHOLD_FLYING_REQUIRED		( -0.6f )	  // throttle goes from [-1...1]
+#define THRESHOLD_FLYING_NOT_REQUIRED	( -0.7f )	  // throttle goes from [-1...1]
 #define MOTOR_SET_POINT_SENSOR_FAULT	((uint16_t)(0.25f*0xFFFF))
 
 /* ------------------------------------------------------------ */
@@ -93,7 +93,7 @@ extern volatile EventGroupHandle_t  gx_fault_EventGroup;
  * 			flight_ROLL 	[rad],
  * 			flight_PITCH	[rad],
  * 			flight_YAW		[rad/s],
- * 			flight_THROTTLE [0 ... 1]
+ * 			flight_THROTTLE [-1 ... 1]
  * \note	Write access:	flight_task
  */
 float gf_flight_setPoint[4];
@@ -152,14 +152,15 @@ uint32_t FlightTask_Init(void)
 	HIDE_Display_InsertDrawFun(FlightTaskDrawDisplay);
 	Sensor_InitPeriph();
 	HIDE_Display_InsertDrawFun(Sensor_DrawDisplay);
-	HIDE_Debug_USB_InsertComFun(HIDE_Sensor_SendDataOverUSB, 1);
+	HIDE_Debug_USB_InsertComFun(HIDE_Sensor_SendDataOverUSB, 0);
     Motor_InitPeriph();
 	HIDE_Display_InsertDrawFun(Motor_DrawDisplay);
 	HIDE_Debug_USB_InsertComFun(HIDE_Motor_SendDataOverUSB, 0);
 
 	// insert pid
     #if( setup_DEV_PID_TUNE )
-	HIDE_Debug_USB_InsertComFun(HIDE_Control_Debug_USB_GetPID, 0);
+	HIDE_Debug_USB_InsertComFun(HIDE_Control_Debug_USB_GetPID, 1);
+	HIDE_Debug_USB_InsertComFun(HIDE_Control_SendDataOverUSB, 0);
 	HIDE_Display_InsertDrawFun(HIDE_Control_PID_TUNE_DrawDisplay);
     #endif
 
@@ -376,11 +377,11 @@ static void StateResting(void)
     else
     {
         //TODO delete later besides Sensor_ReadFusion just for pID lib tests
-        //ReceiverTask_GetSetPoints(&gf_flight_setPoint[0]);
+        ReceiverTask_GetSetPoints(&gf_flight_setPoint[0]);
         Sensor_ReadAndFusion();
 
-        //Control_FlightStabilisation();
-        //Control_Mixer();
+        Control_FlightStabilisation();
+        Control_Mixer();
     }
 
 	Motor_StopAll();

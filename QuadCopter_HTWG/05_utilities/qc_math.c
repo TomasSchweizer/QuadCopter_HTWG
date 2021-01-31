@@ -128,7 +128,6 @@ void Math_StepPidController(math_pidController_s *ps_pidC)
  * \brief   calculate Euler/Tait-Bryan angles out of quaternions
  *
  */
-// TODO change so that it is applicable also without the global variable
 void Math_QuatToEuler(volatile float q[], float fusedAngles[]){
 
     float yaw, pitch, roll;
@@ -138,24 +137,29 @@ void Math_QuatToEuler(volatile float q[], float fusedAngles[]){
     float sq2 =  (q[2]*q[2]);
     float sq3 =  (q[3]*q[3]);
 
-    float test = 2.0 * (q[2]*q[0] - q[1]*q[3]);
+
+    // TODO improve test if time
+    float test = 2.0 * (q[1]*q[3] + q[0]*q[2]);
 
     if(test > 0.999 && test < 1.001){
 
-        yaw = (float) (-2.0*atan2f(q[1], q[0]));
+        yaw = (-2.0*atan2f(q[1], q[0]));
+        pitch = (math_PI/2.0);
         roll = 0.0;
-        pitch = (float) (math_PI/2.0);
+
     }
     else if(test > -1.001 && test < -0.999){
 
-        yaw = (float) (2.0*atan2f(q[1], q[0]));
+        yaw = (2.0*atan2f(q[1], q[0]));
+        pitch = (math_PI/-2.0);
         roll = 0.0;
-        pitch = (float) (math_PI/-2.0);
-    } else {
+    }
+    else{
 
-        yaw = (float) atan2f(2.0 * (q[1]*q[2] + q[3]*q[0]), (sq1 - sq2 - sq3 + sq0));
-        roll = (float) atan2f(2.0 * (q[2]*q[3] + q[1]*q[0]), (-sq1 + sq2 + sq3 + sq0));
-        pitch = (float) asinf(math_LIMIT(test, -1.0, 1.0));
+        roll = atan2f(  q[2]*q[3] + q[0]*q[1]   ,   0.5 - (sq1 + sq2)     );
+        pitch = asinf(  -2.0 * (q[1]*q[3] - q[0]*q[2])  );
+        yaw = atan2f(   q[1]*q[2] + q[0]*q[3]  ,   0.5 - (sq2 + sq3)    );
+
     }
 
 

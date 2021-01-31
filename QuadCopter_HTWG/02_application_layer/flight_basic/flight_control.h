@@ -40,10 +40,12 @@ extern void Control_MotorSameSetPoint(uint16_t ui16_setPoint);
 	extern void HIDE_Control_DebugGetPid(void);
 	extern void HIDE_Control_Debug_USB_GetPID(void);
     extern void HIDE_Control_PID_TUNE_DrawDisplay(void);
+    extern void HIDE_Control_SendDataOverUSB(void);
 #else
 	#define HIDE_Control_DebugGetPid()					// this define will be kicked off from the preprocessor
     #define HIDE_Control_Debug_USB_GetPID()
     #define HIDE_Control_PID_TUNE_DrawDisplay()
+    #define HIDE_Control_SendDataOverUSB()
 #endif
 
 /* ------------------------------------------------------------ */

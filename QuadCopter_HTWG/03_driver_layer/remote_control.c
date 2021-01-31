@@ -39,10 +39,11 @@
 /* ------------------------------------------------------------ */
 
 // Maximum values remote control
-#define ROLL_MAX		(15.0f*math_PI/180.0f)				// [-max...+max] [rad]
-#define PITCH_MAX		(15.0f*math_PI/180.0f)				// [-max...+max] [rad]
-#define YAW_MAX			(10.0f*math_PI/180.0f)				// [-max...+max] [rad/s] // TODO make max higher
-#define THROTTLE_MAX	(1.0f)							// [0   ...+max] []
+#define ROLL_MAX		    (45.0f*math_PI/180.0f)				// [-max...+max] [rad/s]
+#define PITCH_MAX		    (45.0f*math_PI/180.0f)				// [-max...+max] [rad/s]
+#define YAW_MAX			    (45.0f*math_PI/180.0f)				// [-max...+max] [rad/s] // TODO make max higher
+#define THROTTLE_MAX	    (1.0f)							// [-max   ...+max] [throttle]
+#define THROTTLE_RC_EXPO    (0.3f)                           // makes the stick input around throttle less sensitive
 
 /** \brief	Number of Channles in the CPPM signal */
 #define remote_CPPM_CHANNELS 		  ( 6 )
@@ -87,8 +88,11 @@ const float f_maxValues[] = {ROLL_MAX, PITCH_MAX, YAW_MAX, THROTTLE_MAX};
 	#define CPPM_SYNC_TIME_MAX	  		( 18000 )
 
 	// average max-min value from a channel [µs]
-	#define CPPM_MIN_MAX_RANGE			( 760.0f )
+    #define CPPM_MIN_MAX_RANGE_THROTTEL ( 950.0f )
+
+    #define CPPM_MIN_MAX_RANGE			( 816.0f ) // TODO remember 760 as value from master students was wrong 800 much better
 	#define CPPM_MIN_MAX_RANGE_HALF		(CPPM_MIN_MAX_RANGE/2.0f)
+
 
 	// possible position of the AUX stick from the remote control [µs]
 	#define IS_AUX_POS1(aux)   			( aux > 600   && aux < 1200 )
@@ -102,7 +106,7 @@ const float f_maxValues[] = {ROLL_MAX, PITCH_MAX, YAW_MAX, THROTTLE_MAX};
 	#if   ( setup_REMOTE_RIGHT_HAND == (setup_REMOTE&setup_MASK_OPT2) )
 		#define CPPM_ORDER			{ remote_YAW , remote_PITCH , remote_THROTTLE , remote_ROLL , remote_AUX1 , remote_RESERVE}
 	#elif ( setup_REMOTE_LEFT_HAND == (setup_REMOTE&setup_MASK_OPT2) )
-		#define CPPM_ORDER			{ remote_YAW , remote_PITCH , remote_THROTTLE , remote_ROLL , remote_AUX1 , remote_RESERVE}
+		#define CPPM_ORDER			{ remote_YAW , remote_PITCH , remote_THROTTLE , remote_ROLL , remote_AUX1 , remote_RESERVE} // TODO not implemented anymore
 	#else
 		#error	ERROR define the hand in qc_setup.h
 	#endif
@@ -266,14 +270,17 @@ const float f_maxValues[] = {ROLL_MAX, PITCH_MAX, YAW_MAX, THROTTLE_MAX};
 		//	Prepare Data
 		//
 		int16_t i;
-		float help;
+		float help, help_3;
 		for( i=0 ; i<4 ; ++i )
 		{
 			help=(float) (i32_receiverData[i]-i32_offsetData[i]);		// sub offset
 			if(i==remote_THROTTLE)
 			{
-				help=help/CPPM_MIN_MAX_RANGE*f_maxValues[i];			// scale to [0...max]
-				help=math_LIMIT(help, 0, f_maxValues[i]);				// limit to [0...max]
+				help=help/CPPM_MIN_MAX_RANGE_THROTTEL*f_maxValues[i];			// scale to [0...1]
+				help = (2.0 * help) - 1;                                    // move it to [-1..1]
+				help=math_LIMIT(help, -f_maxValues[i], f_maxValues[i]);	// limit to [-1...1]
+				help_3 = help*help*help;
+				help=(1.0 - THROTTLE_RC_EXPO) * help + help_3 * THROTTLE_RC_EXPO;
 			}
 			else
 			{
@@ -286,7 +293,7 @@ const float f_maxValues[] = {ROLL_MAX, PITCH_MAX, YAW_MAX, THROTTLE_MAX};
 		// Fit remote control input to quadcopter rotational axes
 		if( setup_REMOTE_FIT_TO_QC == (setup_REMOTE&setup_MASK_OPT3) ){
 
-		f_receiverSetPoint[remote_YAW]=     -f_receiverSetPoint[remote_YAW];	// invert YAW // TODO maybe don'T invert anymore
+		f_receiverSetPoint[remote_YAW]=     -f_receiverSetPoint[remote_YAW];	// invert YAW
 		f_receiverSetPoint[remote_PITCH]=   -f_receiverSetPoint[remote_PITCH];  // invert PITCH
 		f_receiverSetPoint[remote_ROLL]=    -f_receiverSetPoint[remote_ROLL];   // invert ROLL
 		}

@@ -119,7 +119,7 @@ static void ReceiverTask_DrawDisplay(void)
 	u8g_DrawStr(&gs_display,72,  	yOffset + 0,"Ya");
 	u8g_DrawStr(&gs_display,72+12,  yOffset + 0,u8g_8toa((int8_t)math_RAD2DEC(gf_receiver_setPoint[flight_YAW]),3));
 	u8g_DrawStr(&gs_display,108,  	yOffset + 0,"T");
-	u8g_DrawStr(&gs_display,108+5,  yOffset + 0,u8g_u8toa((uint8_t)(gf_receiver_setPoint[flight_THROTTLE]*100.0f),3));
+	u8g_DrawStr(&gs_display,108+5,  yOffset + 0,u8g_u8toa((uint8_t)(((gf_receiver_setPoint[flight_THROTTLE]+1.0)/2.0)*100.0f),3));
 }
 
 /**

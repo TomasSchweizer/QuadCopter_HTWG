@@ -140,9 +140,8 @@ volatile float gf_sensor_attitudeQuaternion[4] = {1.0, 0.0, 0.0, 0.0};
 volatile float gf_sensor_dotAttitudeQuaternion[4];
 float gf_sensor_fusedAngles[3];
 float gf_sensor_angularVelocity[3];
+float gf_sensor_gyroAngularVelocity[3] = {0.0, 0.0, 0.0};
 
-// TODO just test
-int16_t gf_sensor_raw[9];
 
 
 float gf_sensor_pressure; // TODO maybe later just altitude global
@@ -170,16 +169,18 @@ static int32_t i32_stateTime = CALIBRATE_BEFORE_FIRST_START;
 */
 #if ( setup_DEV_DEBUG_USB )
 
-    static float gf_usb_debug[9];
+    static float f_usb_debug[9];
+    static int16_t i16_usb_debug[9];
 
     void HIDE_Sensor_SendDataOverUSB(void)
     {
+        //HIDE_Debug_USB_InterfaceSend(i16_usb_debug, sizeof(i16_usb_debug)/ sizeof(i16_usb_debug[0]), debug_INT16);
+//
+//        f_usb_debug[0] = gf_sensor_fusedAngles[0];
+//        f_usb_debug[1] = gf_sensor_fusedAngles[1];
+//        f_usb_debug[2] = gf_sensor_fusedAngles[2];
 
-
-        gf_usb_debug[0] = gf_sensor_baroAltitude;
-        gf_usb_debug[1] = gf_sensor_lidarAltitude;
-
-        HIDE_Debug_USB_InterfaceSend(gf_usb_debug, sizeof(gf_usb_debug)/ sizeof(gf_usb_debug[0]), debug_FLOAT);
+        HIDE_Debug_USB_InterfaceSend(f_usb_debug, sizeof(f_usb_debug)/ sizeof(f_usb_debug[0]), debug_FLOAT);
     }
 
 #endif
@@ -265,21 +266,21 @@ void Sensor_DrawDisplay(void)
 
     #if ( setup_ALT_BARO || setup_ALT_LIDAR )
 
-
-    u8g_DrawStr(&gs_display, 58, 32,"aB");
-
-    float alt_print;
-    if(gf_sensor_baroAltitude <= 0){
-
-        alt_print = 0.0;
-    }
-    else
-    {
-        alt_print = gf_sensor_baroAltitude * 100;
-    }
-    u8g_DrawStr(&gs_display, 66, 32, u8g_u16toa((uint16_t)alt_print,4));
-    u8g_DrawStr(&gs_display, 58, 44,"aL");
-    u8g_DrawStr(&gs_display, 66, 44, u8g_u16toa((uint16_t)gf_sensor_lidarAltitude,4));
+//
+//    u8g_DrawStr(&gs_display, 58, 32,"aB");
+//
+//    float alt_print;
+//    if(gf_sensor_baroAltitude <= 0){
+//
+//        alt_print = 0.0;
+//    }
+//    else
+//    {
+//        alt_print = gf_sensor_baroAltitude * 100;
+//    }
+//    u8g_DrawStr(&gs_display, 66, 32, u8g_u16toa((uint16_t)alt_print,4));
+//    u8g_DrawStr(&gs_display, 58, 44,"aL");
+//    u8g_DrawStr(&gs_display, 66, 44, u8g_u16toa((uint16_t)gf_sensor_lidarAltitude,4));
 
     #endif
 
@@ -420,7 +421,8 @@ uint8_t blockTaskTillEventBitIsSet(uint32_t ui32_eventBits, uint32_t ui32_eventT
     static void MPUAxis2QCAxis(float* pf_sensorData);
     static void convertMPUData(float* pf_sensorData);
     static void correctMPUOffset(float* pf_sensorData, uint8_t calibrate);
-    static void calculateAngularVelocity(float *pf_sensorData, float *angularVelocity);
+    static void filterGyroData(float *pf_sensorData);
+    static void calculateAngularVelocity(volatile float *q, volatile float *qDot, float *angularVelocity, float *gyro, float *gyroAngularVelocity);
 
     #if ( setup_ALT_BARO )
 
@@ -466,18 +468,103 @@ uint8_t blockTaskTillEventBitIsSet(uint32_t ui32_eventBits, uint32_t ui32_eventT
     static uint8_t ui8_mpuInitFlag = 0;
 
 
-    // struct for low pass filtering of acc data
-    struct lp_a_struct lp_offsets = {
+    // struct for low pass filtering for dc offset correction of acc data
+    static struct lp_a_struct lp_offsets = {
             .alpha = LP_FREQ2ALPHA(0.3f, dt)
     };
+
+
     // variables for calibrating gyro
     static float f_gyro_cal[3] = { 0.0, 0.0, 0.0};
     static float f_index = 0;
+
+    // structs for gyroscope filtering
+
+    // lowpass at high cut off frequency 100Hz -> less delay and helps against mirroring of frequencies
+    struct lp_a_struct s_lp_gyro = {
+            .alpha = LP_FREQ2ALPHA(100.0f,dt)
+
+    };
+
+    // static notch filter for noise from wind of the props at ~ 80Hz
+    static struct notch_a_s s_nf1_gyro = {
+
+           .x = {0.0, 0.0, 0.0},
+           .x1 = {0.0, 0.0, 0.0},
+           .x2 ={0.0, 0.0, 0.0},
+
+           .y = {0.0, 0.0, 0.0},
+           .y1 ={0.0, 0.0, 0.0},
+           .y2 = {0.0, 0.0, 0.0},
+
+           // notch at q 5
+           .b0 = 0.9032,
+           .b1 = -0.8702,
+           .b2 = 0.9032,
+
+           .a0 = 1.0,
+           .a1 = -0.8702,
+           .a2 = 0.8063,
+
+    };
+
+    // static notch filter for motor vibrations at around 100 Hz
+    static struct notch_a_s s_nf2_gyro = {
+
+        .x = {0.0, 0.0, 0.0},
+        .x1 = {0.0, 0.0, 0.0},
+        .x2 = {0.0, 0.0, 0.0},
+
+        .y = {0.0, 0.0, 0.0},
+        .y1 = {0.0, 0.0, 0.0},
+        .y2 = {0.0, 0.0, 0.0},
+
+        // notch q 1 100 hz works really well should be ok
+//        .b0 = 0.5792,
+//        .b1 = -0.3580,
+//        .b2 = 0.5792,
+//
+//        .a0 = 1.0,
+//        .a1 = -0.3580,
+//        .a2 = 0.1584,
+
+        // notch q 0.8 100 hz works a little bit better but slower response test if worth         .b0 = 0.5000,
+       .b1 = -0.3090,
+       .b2 = 0.5000,
+
+       .a0 = 1.0,
+       .a1 = -0.3090,
+       .a2 = 0.0,
+
+    };
+
+
+
+
+
+
+
     // Magnetometer calibration data
-    static const float f_mag_calibration_b[3] = { -37.8932,   -3.4380,  -66.0203};
-    static const float f_mag_calibration_A[9] = { 1.0296,         0.0,         0.0,
-                                                 0.0,    0.9850,         0.0,
-                                                 0.0,         0.0,    0.9861};
+    #if(!(setup_ALT_BARO || setup_ALT_LIDAR))
+
+        static const float f_mag_calibration_b[3] = { -37.8932,   -3.4380,  -66.0203};
+        static const float f_mag_calibration_A[9] = { 1.0296,         0.0,         0.0,
+                                                     0.0,    0.9850,         0.0,
+                                                     0.0,         0.0,    0.9861};
+
+    #else
+
+        static const float f_mag_calibration_b[3] = { -15.9344,   -1.4309,  -74.7844};
+        static const float f_mag_calibration_A[9] = { 1.0137,         -0.0086,         -0.0278,
+                                                    -0.0086,    0.9866,         -0.0044,
+                                                    -0.0278,         -0.0044,    1.0007};
+
+
+    #endif
+
+
+
+
 
     #if ( setup_ALT_BARO )
 
@@ -678,23 +765,70 @@ uint8_t blockTaskTillEventBitIsSet(uint32_t ui32_eventBits, uint32_t ui32_eventT
         }
     }
 
+
+    static void filterGyroData(float *pf_sensorData)
+    {
+
+        s_lp_gyro.x[0] = pf_sensorData[3];
+        s_lp_gyro.x[1] = pf_sensorData[4];
+        s_lp_gyro.x[2] = pf_sensorData[5];
+
+        lowPassArray(&s_lp_gyro);
+
+        pf_sensorData[3] = s_lp_gyro.y[0];
+        pf_sensorData[4] = s_lp_gyro.y[1];
+        pf_sensorData[5] = s_lp_gyro.y[2];
+
+        notchFilterArray(pf_sensorData, &s_nf1_gyro);
+
+        notchFilterArray(pf_sensorData, &s_nf2_gyro);
+    }
+
+
+
     /**
     * \brief   calculate angulat velocity from tait-bryan angles
     */
-    static void calculateAngularVelocity(float *angles, float *angularVelocity){
+    static void calculateAngularVelocity(volatile float *q, volatile float *qDot,  float *angularVelocity,
+                                         float * pf_sensorData, float*gyroAngularVelocity)
+    {
 
-        float w_angles[3];
-        static float anglesOld[3];
 
-        uint8_t i;
-        for(i=0; i<3; i++)
+
+        float quatC1, quatC2, quatC3, quatC4, quatDot1, quatDot2, quatDot3, quatDot4, w1, wx, wy, wz;
+
+        quatC1 = q[0];
+        quatC2 = -q[1];
+        quatC3 = -q[2];
+        quatC4 = -q[3];
+
+        quatDot1 = qDot[0];
+        quatDot2 = qDot[1];
+        quatDot3 = qDot[2];
+        quatDot4 = qDot[3];
+
+        w1 = 2.0 * (quatDot1*quatC1 - quatDot2*quatC2 - quatDot3*quatC3 - quatDot4 * quatC4);
+        wx = 2.0 * (quatDot1*quatC2 + quatDot2*quatC1 + quatDot3*quatC4 - quatDot4 * quatC3);
+        wy = 2.0 * (quatDot1*quatC3 - quatDot2*quatC4 + quatDot3*quatC1 + quatDot4 * quatC2);
+        wz = 2.0 * (quatDot1*quatC4 + quatDot2*quatC3 - quatDot3*quatC2 + quatDot4 * quatC1);
+
+        if(w1 > -0.1 && w1 < 0.1)
         {
-            w_angles[i] = (angles[i] - anglesOld[i]) / dt;
-            // TODO check if usable limits
-            math_LIMIT(w_angles[i], -2.0, 2.0);
-            gf_sensor_angularVelocity[i] = w_angles[i];
-            anglesOld[i] = angles[i];
+            angularVelocity[0] = wx;
+            angularVelocity[1] = wy;
+            angularVelocity[2] = wz;
         }
+
+
+
+        // copy gyro values
+        gyroAngularVelocity[0] = pf_sensorData[3];
+        gyroAngularVelocity[1] = pf_sensorData[4];
+        gyroAngularVelocity[2] = pf_sensorData[5];
+
+
+
+
 
     }
 
@@ -1282,35 +1416,40 @@ uint8_t blockTaskTillEventBitIsSet(uint32_t ui32_eventBits, uint32_t ui32_eventT
     HIDE_Workload_EstimateStop(p_workHandle);
     // Get MPU data and convert it
     MPU9265_AK8963_GetRawData(&s_MPU9265Inst, &s_MPU9265_AK8963_rawData);
-
-    //        // TODO delete later jus test
-    //        gf_sensor_raw[0] = s_MPU9265_AK8963_rawData.i16_accX;
-    //        gf_sensor_raw[1] = s_MPU9265_AK8963_rawData.i16_accY;
-    //        gf_sensor_raw[2] = s_MPU9265_AK8963_rawData.i16_accZ;
-    //        gf_sensor_raw[3] = s_MPU9265_AK8963_rawData.i16_gyroX;
-    //        gf_sensor_raw[4] = s_MPU9265_AK8963_rawData.i16_gyroY;
-    //        gf_sensor_raw[5] = s_MPU9265_AK8963_rawData.i16_gyroZ;
-    //        gf_sensor_raw[6] = s_MPU9265_AK8963_rawData.i16_magX;
-    //        gf_sensor_raw[7] = s_MPU9265_AK8963_rawData.i16_magY;
-    //        gf_sensor_raw[8] = s_MPU9265_AK8963_rawData.i16_magZ;
-
     MPUrawData2Float(pf_sensorData);
     // Correct MPU data
     MPUAxis2QCAxis(pf_sensorData);
     convertMPUData(pf_sensorData);
+//
+//    // TODO delete just for mag calibration
+//    f_usb_debug[0] = pf_sensorData[0];
+//    f_usb_debug[1] = pf_sensorData[1];
+//    f_usb_debug[2] = pf_sensorData[2];
+//    f_usb_debug[3] = pf_sensorData[3];
+//    f_usb_debug[4] = pf_sensorData[4];
+//    f_usb_debug[5] = pf_sensorData[5];
+//    f_usb_debug[6] = pf_sensorData[6];
+//    f_usb_debug[7] = pf_sensorData[7];
+//    f_usb_debug[8] = pf_sensorData[8];
+
+
     correctMPUOffset(pf_sensorData, 0);
 
-//    // TODO delete later just test
-//    gf_usb_debug[0] = pf_sensorData[0];
-//    gf_usb_debug[1] = pf_sensorData[1];
-//    gf_usb_debug[2] = pf_sensorData[2];
-//    gf_usb_debug[3] = pf_sensorData[3];
-//    gf_usb_debug[4] = pf_sensorData[4];
-//    gf_usb_debug[5] = pf_sensorData[5];
-//    gf_usb_debug[6] = pf_sensorData[6];
-//    gf_usb_debug[7] = pf_sensorData[7];
-//    gf_usb_debug[8] = pf_sensorData[8];
+    filterGyroData(pf_sensorData);
 
+//    f_usb_debug[0] = pf_sensorData[0];
+//    f_usb_debug[1] = pf_sensorData[1];
+//    f_usb_debug[2] = pf_sensorData[2];
+//    f_usb_debug[3] = pf_sensorData[3];
+//    f_usb_debug[4] = pf_sensorData[4];
+//    f_usb_debug[5] = pf_sensorData[5];
+//    f_usb_debug[6] = pf_sensorData[6];
+//    f_usb_debug[7] = pf_sensorData[7];
+//    f_usb_debug[8] = pf_sensorData[8];
+//
+//
+//    HIDE_Debug_USB_InterfaceSend(f_usb_debug, sizeof(f_usb_debug)/ sizeof(f_usb_debug[0]), debug_FLOAT);
+//
 
     // Get attitude quaternion via sensor fusion from MPU data
     MadgwickAHRSupdate(pf_sensorData[X_ACC], pf_sensorData[Y_ACC], pf_sensorData[Z_ACC],
@@ -1320,9 +1459,10 @@ uint8_t blockTaskTillEventBitIsSet(uint32_t ui32_eventBits, uint32_t ui32_eventT
 
     // Get Euler/Tait-Bryan angles from quaternion
     Math_QuatToEuler(gf_sensor_attitudeQuaternion, gf_sensor_fusedAngles);
-    calculateAngularVelocity(gf_sensor_fusedAngles, gf_sensor_angularVelocity);
+    //Math_QuatToEuler(gf_sensor_dotAttitudeQuaternion, gf_sensor_angularVelocity);
+    calculateAngularVelocity(gf_sensor_attitudeQuaternion, gf_sensor_dotAttitudeQuaternion, gf_sensor_angularVelocity, pf_sensorData, gf_sensor_gyroAngularVelocity);
 
-    #if (setup_ALT_BARO)
+     #if (setup_ALT_BARO)
 
 
         // get the new raw baro data and calculate is firstly started after

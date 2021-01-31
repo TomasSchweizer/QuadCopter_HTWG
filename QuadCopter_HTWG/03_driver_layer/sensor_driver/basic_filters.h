@@ -30,6 +30,7 @@
 
 #define LP_ARRAY_SIZE 3
 #define HP_ARRAY_SIZE 3
+#define NF_ARRAY_SIZE 3
 
 /* Structs
 =============================================================================*/
@@ -59,11 +60,64 @@ struct hp_a_struct {
 	const float alpha;		// filter coefficient
 };
 
+struct notch_s {
+
+    // input signal
+    float x;
+    // states to buffer older input signals
+    float x1;
+    float x2;
+    // output signal (filtered)
+    float y;
+    // states to buffer older output signals
+    float y1;
+    float y2;
+
+    // filter coefficients input
+    const float b0;
+    const float b1;
+    const float b2;
+
+    // filter coefficients output
+    const float a0;
+    const float a1;
+    const float a2;
+
+};
+
+struct notch_a_s {
+
+    // input signal
+    float x[NF_ARRAY_SIZE];
+    // states to buffer older input signals
+    float x1[NF_ARRAY_SIZE];
+    float x2[NF_ARRAY_SIZE];
+    // output signal (filtered)
+    float y[NF_ARRAY_SIZE];
+    // states to buffer older output signals
+    float y1[NF_ARRAY_SIZE];
+    float y2[NF_ARRAY_SIZE];
+
+    // filter coefficients input
+    const float b0;
+    const float b1;
+    const float b2;
+
+    // filter coefficients output
+    const float a0;
+    const float a1;
+    const float a2;
+
+};
+
+
+
 /* Function Prototypes
 =============================================================================*/
 extern float highPass(struct hp_struct *hp);
 extern float lowPass(struct lp_struct *lp);
 extern void lowPassArray(struct lp_a_struct *lp);
 extern void highPassArray(struct hp_a_struct *hp);
+extern void notchFilterArray(float *pf_sensorData, struct notch_a_s *nf);
 
 #endif /* _SRC_BASIC_FILTERS_H_ */

@@ -73,6 +73,16 @@ extern void xPortSysTickHandler(void);
 #define HANDLER_I2C2_MASTER_AND_SLAVE       IntDefaultHandler
 #define HANDLER_TIMER2_A                    IntDefaultHandler
 #define HANDLER_USB0                        IntDefaultHandler
+#define HANDLER_WATCHDOG                   IntDefaultHandler
+
+//
+// Watchdog ISR
+//
+#if( periph_WATCHDOG_INT == INT_WATCHDOG )
+    extern void Watchdog_IntHandler(void);
+    #undef HANDLER_WATCHDOG
+    #define HANDLER_WATCHDOG                   Watchdog_IntHandler
+#endif
 
 //
 //  Motor ISRs
@@ -168,7 +178,7 @@ void (* const g_pfnVectors[])(void) =
     IntDefaultHandler,                      // ADC Sequence 1
     IntDefaultHandler,                      // ADC Sequence 2
     IntDefaultHandler,                      // ADC Sequence 3
-    IntDefaultHandler,                      // Watchdog timer
+    HANDLER_WATCHDOG,                      // Watchdog timer
     IntDefaultHandler,                      // Timer 0 subtimer A
     IntDefaultHandler,                      // Timer 0 subtimer B
     IntDefaultHandler,                      // Timer 1 subtimer A

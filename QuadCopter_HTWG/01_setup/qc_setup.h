@@ -29,7 +29,7 @@
 	#define setup_DEV_SUM_FAULTS		( 1 )					// every fault   eventBit gets a name & every time a fault   event happens, increment a counter (gp_fault_coundEdges)
 	#define setup_DEV_SUM_RECEIVS		( 1 )					// every receive eventBit gets a name & every time a receive event happens, increment a counter
 	#define setup_DEV_DISPLAY			( 1 )					// show workloads, sumFaults, sumReceivs on Display (but only when the desired setup_DEV=1)
-	#define setup_DEV_PID_TUNE			( 0 )					// read debug interface for PID values (this can crash with write commands on the trace interface)
+	#define setup_DEV_PID_TUNE			( 1 )					// read debug interface for PID values (this can crash with write commands on the trace interface)
 	#define setup_DEV_DEBUG_PINS		( 1 )					// enable debug pins
     #define setup_DEV_DEBUG_USB         ( 1 )                   // enable debug options over USB
 	#define setup_DEV_COMMANDS			( 0 )					// enable HIDE-function macros to insert into the command Queue Task
@@ -45,12 +45,17 @@
 /* ------------------------------------------------------------ */
 /*				Select hardware setup			    			*/
 /* ------------------------------------------------------------ */
-
 // Masks to unpack options (if more then one option is used for this hardware)
 #define setup_MASK_OPT1					( 0x000000FF )
 #define setup_MASK_OPT2					( 0x0000FF00 )
 #define setup_MASK_OPT3					( 0x00FF0000 )
 #define setup_MASK_OPT4					( 0xFF000000 )
+
+// Select if watchdog should be enabled or not. !!! Should only be disabled in development !!!
+#define setup_WATCHDOG_NONE             ( 0x00000001 )
+#define setup_WATCHDOG_ACTIVE           ( 0x00000002 )
+#define setup_WATCHDOG                  ( setup_WATCHDOG_ACTIVE )
+
 
 // Select the Mode to control the Motors (others will be exclude from build)
 #define setup_MOTOR_NONE  				( 0x00000001 )			// all motor functions will do nothing
