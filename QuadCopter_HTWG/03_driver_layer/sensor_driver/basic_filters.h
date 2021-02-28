@@ -1,123 +1,118 @@
-/*
- * basic_filters.h
- *
- *  Created on: 09.01.2016
- *      Author: Daniel Eckstein
- */
+/*===================================================================================================*/
+/*  basic_filters.h                                                                                  */
+/*===================================================================================================*/
 
-#ifndef _SRC_BASIC_FILTERS_H_
-#define _SRC_BASIC_FILTERS_H_
+/**
+*   @file   basic_filters.h
+*
+*   @brief  API for basic LP, HP and notch filter implementations
+*
+*   @details
+*
+*   <table>
+*   <tr><th>Date            <th>Author              <th>Notes
+*   <tr><td>06/12/2016      <td>Daniel Eckstein     <td>Implementation
+*   <tr><td>20/01/2021      <td>Tomas Schweizer     <td>Added Notch-Filter
+*   <tr><td>31/01/2021      <td>Tomas Schweizer     <td>Code clean up & Doxygen
+*   </table>
+*   \n
+*
+*   Sources:
+*   -
+*/
+/*====================================================================================================*/
 
-/* Includes
-=============================================================================*/
+#ifndef _BASIC_FILTERS_H_
+#define _BASIC_FILTERS_H_
 
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                     Include File Definitions                                       */
+/* ---------------------------------------------------------------------------------------------------*/
+#include "qc_math.h"
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                      Defines                                                       */
+/* ---------------------------------------------------------------------------------------------------*/
 
-/* Defines
-=============================================================================*/
-// define Pi
-#ifndef M_PI
-#define M_PI 3.14159265358979323846f
-#endif
+// calculate alpha from frequency and sample time
+#define LP_FREQ2ALPHA(FREQ, DT) ((2.0f*math_PI*(DT)*(FREQ))/(2.0f*math_PI*(DT)*(FREQ)+1))   ///< alpha for lowpass
+#define HP_FREQ2ALPHA(FREQ, DT) ((1.0f)/(2.0f*math_PI*(DT)*(FREQ)+1))                       ///< alpha for highpass
 
-// calculate alpha from freqency and timestep
-#define LP_FREQ2ALPHA(FREQ, DT) ((2.0f*M_PI*(DT)*(FREQ))/(2.0f*M_PI*(DT)*(FREQ)+1))
-#define HP_FREQ2ALPHA(FREQ, DT) ((1.0f)/(2.0f*M_PI*(DT)*(FREQ)+1))
+#define LP_ARRAY_SIZE 3         ///< LP array size 3 because only used for either gyro or accelerometer with each 3 axis
+#define HP_ARRAY_SIZE 3         ///< HP array size 3 because only used for either gyro or accelerometer with each 3 axis
+#define NF_ARRAY_SIZE 3         ///< Notch filter array size 3 because only used for either gyro or accelerometer with each 3 axis
 
-//// define a lopass array structure
-//#define LP_A_STRUCT(name, alpha_val, size) struct lp_a_struct { float x[size]; float y[size]; const float alpha = alpha_val; } name;
-//// define a highpass array structure
-//#define HP_A_STRUCT(name, alpha_val, size) struct hp_a_struct { float x[size]; float x_old[size]; float y[size]; const float alpha = alpha_val; } name;
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                      Type Definitions                                              */
+/* ---------------------------------------------------------------------------------------------------*/
 
-#define LP_ARRAY_SIZE 3
-#define HP_ARRAY_SIZE 3
-#define NF_ARRAY_SIZE 3
-
-/* Structs
-=============================================================================*/
+/// Struct for first order highpass filter, with one value
 struct hp_struct {
-	float x;		// input value
-	float x_old;	// last input value
-	float y_old;	// last output value
-	const float alpha; // filter coefficient
+	float x;		            ///< Input value
+	float x_old;	            ///< Last input value
+	float y_old;	            ///< Last output value
+	const float alpha;          ///< Filter coefficient
 };
 
-struct lp_struct {
-	float x;		// input value
-	float y_old;	// last output value
-	const float alpha; // filter coefficient
-};
-
-struct lp_a_struct {
-	float x[LP_ARRAY_SIZE];	// input value
-	float y[LP_ARRAY_SIZE];	// last output value
-	const float alpha;		// filter coefficient
-};
-
+/// Struct for first order highpass filter, with an array of values
 struct hp_a_struct {
-	float x[HP_ARRAY_SIZE];		// input value
-	float x_old[HP_ARRAY_SIZE];	// last input value
-	float y[HP_ARRAY_SIZE];		// last output value
-	const float alpha;		// filter coefficient
+    float x[HP_ARRAY_SIZE];     ///< Array of input values
+    float x_old[HP_ARRAY_SIZE]; ///< Array of last input values
+    float y[HP_ARRAY_SIZE];     ///< Array of last output values
+    const float alpha;          ///< Filter coefficient
 };
 
-struct notch_s {
-
-    // input signal
-    float x;
-    // states to buffer older input signals
-    float x1;
-    float x2;
-    // output signal (filtered)
-    float y;
-    // states to buffer older output signals
-    float y1;
-    float y2;
-
-    // filter coefficients input
-    const float b0;
-    const float b1;
-    const float b2;
-
-    // filter coefficients output
-    const float a0;
-    const float a1;
-    const float a2;
-
+/// Struct for first order lowpass filter, with one value
+struct lp_struct {
+	float x;		            ///< input value
+	float y_old;	            ///< last output value
+	const float alpha;          ///< Filter coefficient
 };
 
+/// Struct for first order lowpass filter, with an array of values
+struct lp_a_struct {
+	float x[LP_ARRAY_SIZE];	    ///< Array of input values
+	float y[LP_ARRAY_SIZE];	    ///< Array of last output values
+	const float alpha;		    ///< Filter coefficient
+};
+
+/// Struct for second order IIR notch filter, with an array of values
 struct notch_a_s {
 
-    // input signal
-    float x[NF_ARRAY_SIZE];
-    // states to buffer older input signals
-    float x1[NF_ARRAY_SIZE];
-    float x2[NF_ARRAY_SIZE];
-    // output signal (filtered)
-    float y[NF_ARRAY_SIZE];
-    // states to buffer older output signals
-    float y1[NF_ARRAY_SIZE];
-    float y2[NF_ARRAY_SIZE];
+    float x[NF_ARRAY_SIZE];     ///< Input signal array
+    float x1[NF_ARRAY_SIZE];    ///< Array of states to buffer older input signal
+    float x2[NF_ARRAY_SIZE];    ///< Array of states to buffer older input signal
+
+    float y[NF_ARRAY_SIZE];     ///< Output signal array (filtered)
+    float y1[NF_ARRAY_SIZE];    ///< Array of states to buffer older output signal
+    float y2[NF_ARRAY_SIZE];    ///< Array of states to buffer older output signal
 
     // filter coefficients input
-    const float b0;
-    const float b1;
-    const float b2;
+    const float b0;             ///< Coefficient for x
+    const float b1;             ///< Coefficient for x1
+    const float b2;             ///< Coefficient for x2
 
     // filter coefficients output
-    const float a0;
-    const float a1;
-    const float a2;
+    const float a0;             ///< Coefficient for y
+    const float a1;             ///< Coefficient for y1
+    const float a2;             ///< Coefficient for y2
 
 };
 
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                      Global Variables                                              */
+/* ---------------------------------------------------------------------------------------------------*/
 
-
-/* Function Prototypes
-=============================================================================*/
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                      API Procedure Definitions                                     */
+/* ---------------------------------------------------------------------------------------------------*/
 extern float highPass(struct hp_struct *hp);
 extern float lowPass(struct lp_struct *lp);
 extern void lowPassArray(struct lp_a_struct *lp);
 extern void highPassArray(struct hp_a_struct *hp);
 extern void notchFilterArray(float *pf_sensorData, struct notch_a_s *nf);
 
-#endif /* _SRC_BASIC_FILTERS_H_ */
+#endif /* _BASIC_FILTERS_H_ */
+
+/*====================================================================================================*/
+/* End of file                                                                                        */
+/*====================================================================================================*/

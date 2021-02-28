@@ -1,20 +1,28 @@
-//=====================================================================================================
-// @file LidarLitev3HP_register.h
-//=====================================================================================================
-//
-// @brief List of used registers from LidarLite_v3HP
-//
-// Date                 Author                      Notes
-// @date 24/12/2020     @author Tomas Schweizer     Implementation
-//
-// Source:
-// Data sheet LidarLite_v3HP
-//
-//=====================================================================================================
+/*===================================================================================================*/
+/*  LidarLitev3HP_register.h                                                                         */
+/*===================================================================================================*/
+
+/**
+*   @file   LidarLitev3HP_register.h
+*
+*   @brief  List of used registers from LidarLite_v3HP
+*
+*   @details
+*
+*   <table>
+*   <tr><th>Date            <th>Author              <th>Notes
+*   <tr><td>24/12/2021      <td>Tomas Schweizer     <td>Implementation
+*   <tr><td>31/01/2021      <td>Tomas Schweizer     <td>Code clean up & Doxygen
+*   </table>
+*   \n
+*
+*   Sources:
+*   - Sensor data sheet
+*/
+/*====================================================================================================*/
 
 #ifndef LIDARLITEV3HP_REGISTER_H_
 #define LIDARLITEV3HP_REGISTER_H_
-
 
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                     Include File Definitions                                       */
@@ -23,19 +31,20 @@
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                      Defines                                                       */
 /* ---------------------------------------------------------------------------------------------------*/
-// 2 i2c addresses one for write and  one for read of the LidarLite_v3HP
+/// i2c address for the LidarLite_v3HP
 #define LIDARLITEV3HP_ADDRESS                       0x62
 
 // control registers
-#define LIDARLITEv3HP_ACQ_COMMAND                   0x00
-#define LIDARLITEv3HP_STATUS                        0x01
-#define LIDARLITEv3HP_SIG_COUNT_VAL                 0x02
-#define LIDARLITEv3HP_ACQ_CONFIG_REG                0x04
-#define LIDARLITEv3HP_REF_COUNT_VAL                 0x12
-#define LIDARLITEv3HP_THRESHOLD_BYPASS              0x1C
+#define LIDARLITEv3HP_ACQ_COMMAND                   0x00    ///< Device command
+#define LIDARLITEv3HP_STATUS                        0x01    ///< System status
+#define LIDARLITEv3HP_SIG_COUNT_VAL                 0x02    ///< Maximum acquisition count
+#define LIDARLITEv3HP_ACQ_CONFIG_REG                0x04    ///< Aquisition mode control
+#define LIDARLITEv3HP_REF_COUNT_VAL                 0x12    ///< Reference acquisition count
+#define LIDARLITEv3HP_THRESHOLD_BYPASS              0x1C    ///< Peak detection threshold bypass
+
 // read registers
-#define LIDARLITEv3HP_DISTANCE_HIGH_BYTE            0x0f
-#define LIDARLITEv3HP_DISTANCE_LOW_BYTE             0x10
+#define LIDARLITEv3HP_DISTANCE_HIGH_BYTE            0x0f    ///< Distance measurement high byte
+#define LIDARLITEv3HP_DISTANCE_LOW_BYTE             0x10    ///< Distance measurement low byte
 
 // bit values for balanced mode !!! is used !!!
 #define LIDARLITEv3HP_SIGCOUNTVAL_BALANCED          0x80
@@ -65,8 +74,6 @@
 /* ---------------------------------------------------------------------------------------------------*/
 #endif /* LIDARLITEV3HP_REGISTER_H_ */
 
-//=====================================================================================================
-// End of file
-//=====================================================================================================
-
-
+/*====================================================================================================*/
+/* End of file                                                                                        */
+/*====================================================================================================*/

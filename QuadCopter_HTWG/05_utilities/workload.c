@@ -1,24 +1,36 @@
-/**
- * 		@file 	workload.c
- * 		@brief	Estimate the workload for all Tasks.
- *  			create instances to estimate desired workloads.
- *//*	@author Tobias Walter
- * 		@date 	21.05.2016	(last modified)
- */
+/*===================================================================================================*/
+/*  workload.c                                                                                       */
+/*===================================================================================================*/
 
-/* ------------------------------------------------------------ */
-/*				Include File Definitions						*/
-/* ------------------------------------------------------------ */
+/*
+*   file   workload.c
+*
+*   brief  Implementation of functions to estimate workload for desired tasks/transactions
+*
+*   @details
+*   Used to create workload instances to estimate desired workloads
+*
+*   <table>
+*   <tr><th>Date            <th>Author              <th>Notes
+*   <tr><td>21/05/2016      <td>Tobias Grimm        <td>Implementation & last modifications through MAs
+*   <tr><td>31/01/2021      <td>Tomas Schweizer     <td>Code clean up & Doxygen
+*   </table>
+*   \n
+*
+*   Sources:
+*
+*/
+/*====================================================================================================*/
 
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                     Include File Definitions                                       */
+/* ---------------------------------------------------------------------------------------------------*/
+
+// Standard libraries
 #include <stdbool.h>
 #include <stdint.h>
 
-//  FreeRTOS
-#include "FreeRTOS.h"
-#include "event_groups.h"
-#include "task.h"
-
-//  Hardware Specific
+//  Hardware specific libraries
 #include "inc/hw_memmap.h"
 #include "inc/hw_ints.h"
 #include "driverlib/sysctl.h"
@@ -27,23 +39,31 @@
 #include "driverlib/timer.h"
 #include "driverlib/gpio.h"
 
-// setup
+// Setup
 #include "peripheral_setup.h"
 #include "prioritys.h"
 
-// drivers
+// Drivers
+#include  "workload.h"
 #include "qc_math.h"
 #include "display_driver.h"
 
-// application
-#include  "workload.h"
+// FreeRTOS
+#include "FreeRTOS.h"
+#include "event_groups.h"
+#include "task.h"
+
 
 #if ( setup_DEV_WORKLOAD_CALC ) || DOXYGEN
+    /*------------------------------------------------------------------------------------------------*/
+    /*                                     Local defines                                              */
+    /* -----------------------------------------------------------------------------------------------*/
 
-	/* ------------------------------------------------------------ */
-	/*				Local Type Definitions							*/
-	/* ------------------------------------------------------------ */
+    /*------------------------------------------------------------------------------------------------*/
+    /*                                     Local Type Definitions                                     */
+    /* -----------------------------------------------------------------------------------------------*/
 
+    /// Struct for a workload instance
 	typedef struct workload_s{
 		uint16_t  		ui16_start;		/**< time start [us] */
 		uint16_t  		ui16_storage;	/**< time storage [us] */
@@ -52,56 +72,58 @@
 		struct workload_s*  ps_last; 	/**< pointer to the next element (linked List) */
 	}workload_s;
 
-	/* ------------------------------------------------------------ */
-	/*				Global Variables								*/
-	/* ------------------------------------------------------------ */
+	/* ------------------------------------------------------------------------------------------------*/
+    /*                                      Forward Declarations                                       */
+    /* ------------------------------------------------------------------------------------------------*/
+
+    void vApplicationIdleHook( void );
+    void Workload_TaskSwitchNotify( void );
+    void Workload_TimeSampelIntHandler( void );
+
+	/* ---------------------------------------------------------------------------------------------------*/
+	/*                                      Global Variables                                              */
+	/* ---------------------------------------------------------------------------------------------------*/
+
 
 	/**
-	 * @var 	gui16_tasksTimeShareMemory
-	 * \brief	every Task has a field index (see priority.h)
-	 *
-	 * \note	Write access:	Timer ISR and RTOS Kernal
-	 *			(this race condition is not critical)
+	 * @brief	Every Task has a field index (see priority.h)
 	 */
 	volatile uint16_t gui16_tasksTimeShareMemory[priority_NUM_COUNT];
 
 	/**
-	 * \brief	array with handles to the different tasks.
+	 * @brief	Array with handles to the different tasks.
 	 *
-	 * 			every Task stores his handle under the right NUM (with the HIDE_Prio_StoreTaskHandle function)
-	 *			make shure, that the Idle Task and Demon Task do that too (in FreeRTOS source files)
-	 *
-	 * \note	Write access:	main (Scheduler has not been started yet) & Scheduler (for Idle and Demon-Task)
+	 * @details
+	 * Every Task stores his handle under the right NUM (with the HIDE_Prio_StoreTaskHandle function)
+	 * make sure, that the Idle Task and Demon Task do that too (in FreeRTOS source files)
 	 */
 	TaskHandle_t  g_workload_taskHandles[priority_NUM_COUNT];
 
-	/* ------------------------------------------------------------ */
-	/*				Local Variables									*/
-	/* ------------------------------------------------------------ */
+	/* ---------------------------------------------------------------------------------------------------*/
+    /*                                      Local Variables                                               */
+    /* ---------------------------------------------------------------------------------------------------*/
 
 	static uint16_t ui16_taskStartTime;
 	static volatile uint16_t aui16_tasksTimeShareCalc[priority_NUM_COUNT];
 	static workload_s* ps_last = 0;		// linked list to walk backwards through all workload_s instances
-	/* ------------------------------------------------------------ */
-	/*				Forward Declarations							*/
-	/* ------------------------------------------------------------ */
 
-	void vApplicationIdleHook( void );
-	void Workload_TaskSwitchNotify( void );
-	void Workload_TimeSampelIntHandler( void );
 
-	/* ------------------------------------------------------------ */
-	/*				Procedure Definitions							*/
-	/* ------------------------------------------------------------ */
+	/* -----------------------------------------------------------------------------------------------*/
+    /*                                      Procedure Definitions                                     */
+    /* -----------------------------------------------------------------------------------------------*/
 
 	/**
-	 * \brief	create an instance of a workload estimator.
+	 * @brief	Create an instance of a workload estimator.
 	 *
-	 *			(this should be performed before scheduler starts)
-	 *			e.g. in the init of a driver or task
-	 * \param	p_handle	handle to the workload instance to be created
-	 * \param	pc_name		name for the workload estimation instance
-	 * \note	to enable this HIDE function set setup_DEV_WORKLOAD_CALC in qc_setup.h
+	 * @details
+	 * This should be performed before scheduler starts, e.g. in the init of a driver or task
+	 *
+	 * @param	p_handle --> Handle to the workload instance to be created
+	 * @param	pc_name --> Name for the workload estimation instance
+	 *
+	 * @return  void
+	 *
+	 * @note	To enable this HIDE function set setup_DEV_WORKLOAD_CALC in qc_setup.h
 	 */
 	void HIDE_Workload_EstimateCreate(workload_handle_p* p_handle, const char* pc_name)
 	{
@@ -119,13 +141,18 @@
 	}
 
 	/**
-	 * \brief	start time measurement for a workload estimation
+	 * @brief	Start time measurement for a workload estimation
 	 *
-	 * 			(keep in mind, that the measurement estimation can
-	 *			become bad, if sheduler switches to a nother task or ISR happens,
-	 *			while the measurement is running)
-	 * \param	p_handle	pointer to handle of the workload instance
-	 * \note	to enable this HIDE function set setup_DEV_WORKLOAD_CALC in qc_setup.h
+	 * @details
+	 * Keep in mind, that the measurement estimation can become bad,
+	 * if the scheduler switches to another task or ISR happens, while the measurement is running.
+	 *
+	 *
+	 * @param	p_handle --> Pointer to handle of the workload instance
+	 *
+	 * @return  void
+	 *
+	 * @note	To enable this HIDE function set setup_DEV_WORKLOAD_CALC in qc_setup.h
 	 */
 	void HIDE_Workload_EstimateStart(workload_handle_p p_handle)
 	{
@@ -134,13 +161,17 @@
 	}
 
 	/**
-	 * \brief	stop time measurement for a workload estimation
+	 * @brief	Stop time measurement for a workload estimation
 	 *
-	 *			(keep in mind, that the measurement estimation can
-	 *			become bad, if sheduler switches to a nother task or ISR happens,
-	 *			while the measurement is running)
-	 * \param	p_handle	pointer to handle of the workload instance
-	 * \note	to enable this HIDE function set setup_DEV_WORKLOAD_CALC in qc_setup.h
+	 * @details
+	 * Keep in mind, that the measurement estimation can become bad,
+	 * if scheduler switches to another task or ISR happens, while the measurement is running
+	 *
+	 * @param	p_handle --> Pointer to handle of the workload instance
+	 *
+	 * @return  void
+	 *
+	 * @note	To enable this HIDE function set setup_DEV_WORKLOAD_CALC in qc_setup.h
 	 */
 	void HIDE_Workload_EstimateStop(workload_handle_p p_handle)
 	{
@@ -149,7 +180,9 @@
 	}
 
 	/**
-	 * \brief	store all workloads and reset the storages of all workload instances
+	 * @brief	Store all workloads and reset the storages of all workload instances
+	 *
+	 * @return  void
 	 */
 	static void EstimateEndAll(void)
 	{
@@ -171,10 +204,14 @@
 	}
 
 	/**
-	 * \brief	store the taskHandle under the TaskNumber
-	 * \param	ui8_numTask		the unique Task Number (see prioritys.h)
-	 * \param	x_taskHandle	the taskHandle to store
-	 * \note	to enable this HIDE function set setup_DEV_WORKLOAD_CALC in qc_setup.h
+	 * @brief	Store the taskHandle under the TaskNumber
+	 *
+	 * @param	ui8_numTask --> The unique Task Number (see prioritys.h)
+	 * @param	x_taskHandle --> The taskHandle to store
+	 *
+	 * @return  void
+	 *
+	 * @note	To enable this HIDE function set setup_DEV_WORKLOAD_CALC in qc_setup.h
 	 */
 	void HIDE_Workload_StoreTaskHandle(uint8_t ui8_numTask,TaskHandle_t x_taskHandle)
 	{
@@ -183,8 +220,11 @@
 	}
 
 	/**
-	 * \brief	Draw info about Workload on the Display
-	 * \note	to enable this HIDE function set setup_DEV_WORKLOAD_CALC in qc_setup.h
+	 * @brief	Draw info about Workload on the display
+	 *
+	 * @return  void
+	 *
+	 * @note	To enable this HIDE function set setup_DEV_WORKLOAD_CALC in qc_setup.h
 	 */
 	void HIDE_Workload_DrawDisplay(void)
 	{
@@ -221,13 +261,13 @@
 	}
 
 	/**
-	 * \brief	Saves the time share of the Tasks every time the alive Timer flows over in an seperate array.
+	 * @brief	Saves the time share of the Tasks every time the alive timer flows over in an separate array.
+	 *
+	 * @return  void
 	 */
 	void Workload_TimeSampelIntHandler( void )
 	{
-		//
 		// Clear the timer interrupt flag.
-		//
 		ROM_TimerIntClear(periph_WORKLOAD_TIMER_BASE, TIMER_TIMA_TIMEOUT);
 
 		//Workload_TaskSwitchNotify();
@@ -244,13 +284,11 @@
 
 #if ( setup_DEV_WORKLOAD_CALC || setup_DEV_WORKLOAD_LED ) || DOXYGEN
 
-	/* ------------------------------------------------------------ */
-	/*			     	Definitions							        */
-	/* ------------------------------------------------------------ */
+	/* ---------------------------------------------------------------------------------------------------*/
+	/*                                      Defines                                                       */
+	/* ---------------------------------------------------------------------------------------------------*/
 
-	//
-	// define the desired peripheral setup (see peripheral_setup.h)
-	//
+	// Define the desired peripheral setup (see peripheral_setup.h)
 	#if ( GPIO_PORTF_BASE == (periph_WORKLOAD_ALIVE_LED&periph_MASK_PORT) )
 		#define ALIVE_LED_PORT_SYSCTL		SYSCTL_PERIPH_GPIOF
 	#else
@@ -266,7 +304,7 @@
 	#endif
 
 	/**
-	 * \brief	Does work with the smallest priority
+	 * @brief	Does work with the smallest priority
 	 */
 	void vApplicationIdleHook( void )
 	{
@@ -276,24 +314,25 @@
 	}
 
 	/**
-	 * \brief	Initializes peripherals for workload calculation
-	 * \note	to enable this HIDE function set setup_DEV_WORKLOAD_CALC or setup_DEV_WORKLOAD_LED in qc_setup.h
+	 * @brief	Initializes peripherals for workload calculation
+	 *
+	 * @note	To enable this HIDE function set setup_DEV_WORKLOAD_CALC or setup_DEV_WORKLOAD_LED in qc_setup.h
 	 */
 	void HIDE_Workload_Init( void )
 	{
-		// activates Timer
+		// Activates Timer
 		ROM_SysCtlPeripheralEnable(WORKLOAD_SYSCTL_PERIPH_TIMER);
-		// disable Timer for configuration.
+		// Disable Timer for configuration.
 		ROM_TimerDisable(periph_WORKLOAD_TIMER_BASE,periph_WORKLOAD_TIMER_MODULE);
 
-		// timer1_A counts from 0xffff to 0x000 down and starts again.
+		// Timer2A counts from 0xffff to 0x000 down and starts again.
 		ROM_TimerConfigure(periph_WORKLOAD_TIMER_BASE, TIMER_CFG_SPLIT_PAIR | TIMER_CFG_A_PERIODIC);
 
 		// prescaler 80 for 80Mhz -> 1us
-		// prescaler 50 for 50Mhz  -> 1us
 
 		ROM_TimerPrescaleSet(periph_WORKLOAD_TIMER_BASE,periph_WORKLOAD_TIMER_MODULE,80);
 
+		// If workload calculation is set then interruts for timer are activated
 		#if ( setup_DEV_WORKLOAD_CALC )
 			ROM_TimerIntEnable(periph_WORKLOAD_TIMER_BASE, TIMER_TIMA_TIMEOUT );
 			ROM_IntEnable(periph_WORKLOAD_TIMER_INT);
@@ -301,7 +340,7 @@
 
 		ROM_TimerEnable(periph_WORKLOAD_TIMER_BASE, periph_WORKLOAD_TIMER_MODULE);
 
-		// init Alive LED
+		// Init Alive LED
 		#if ( setup_DEV_WORKLOAD_LED )
 			ROM_SysCtlPeripheralEnable(ALIVE_LED_PORT_SYSCTL);
 			ROM_GPIOPinTypeGPIOOutput(ALIVE_LED_PORT, ALIVE_LED_PIN);
@@ -309,7 +348,7 @@
 	}
 
 	/**
-	 * \brief	Measures the task time shares and adds the up(for each task seperatly) until the Alive time interupt is triggered.
+	 * @brief	Measures the task time shares and adds them up (for each task separately) until the alive time interrupt is triggered.
 	 */
 	void Workload_TaskSwitchNotify( void )
 	{
@@ -329,3 +368,6 @@
 
 #endif
 
+/*====================================================================================================*/
+/* End of file                                                                                        */
+/*====================================================================================================*/

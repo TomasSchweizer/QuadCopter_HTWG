@@ -1,22 +1,35 @@
-//=====================================================================================================
-// @file watchdog.c
-//=====================================================================================================
-//
-// @brief Implementation of a watchdog timer to reset the system in dangerous situations
-//
-// Date                 Author                      Notes
-// @date 15/01/2020     @author Tomas Schweizer     Implementation
-//
-// Source:
-// TivaWare Examples
-//
-//=====================================================================================================
+/*===================================================================================================*/
+/*  watchdog.c                                                                                       */
+/*===================================================================================================*/
+
+/*
+*   file   watchdog.c
+*
+*   brief  Implementation of a watchdog timer to reset the system in dangerous situations
+*
+*   details
+*
+*   <table>
+*   <tr><th>Date            <th>Author              <th>Notes
+*   <tr><td>15/01/2021      <td>Tomas Schweizer     <td>Implementation
+*   <tr><td>31/01/2021      <td>Tomas Schweizer     <td>Code clean up & Doxygen
+*   </table>
+*   \n
+*
+*   Sources:
+*   TivaWare Examples
+*/
+/*====================================================================================================*/
 
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                     Include File Definitions                                       */
 /* ---------------------------------------------------------------------------------------------------*/
+
+// Standard libraries
 #include <stdint.h>
 #include <stdbool.h>
+
+// Hardware specific libraries
 #include "inc/hw_ints.h"
 #include "inc/hw_memmap.h"
 #include "inc/hw_types.h"
@@ -27,9 +40,11 @@
 #include "driverlib/rom_map.h"
 #include "driverlib/debug.h"
 
+// Setup
 #include "prioritys.h"
 #include "peripheral_setup.h"
 
+// Application
 #include "watchdog.h"
 
 /* ---------------------------------------------------------------------------------------------------*/
@@ -43,7 +58,9 @@
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                      Forward Declarations                                          */
 /* ---------------------------------------------------------------------------------------------------*/
+
 void Watchdog_IntHandler(void);
+
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                      Global Variables                                              */
 /* ---------------------------------------------------------------------------------------------------*/
@@ -55,14 +72,19 @@ void Watchdog_IntHandler(void);
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                      Procedure Definitions                                         */
 /* ---------------------------------------------------------------------------------------------------*/
+
+// If watchdog is activated in qc_setup
 #if (setup_WATCHDOG == (setup_WATCHDOG_ACTIVE&setup_MASK_OPT1) )
 
-    #define WATCHDOG_SYSCTL_PERIPH              SYSCTL_PERIPH_WDOG0
-    #define WATCHDOG_BASE                       WATCHDOG0_BASE
+
+    #define WATCHDOG_SYSCTL_PERIPH              SYSCTL_PERIPH_WDOG0     ///<watchdog peripheral
+    #define WATCHDOG_BASE                       WATCHDOG0_BASE          ///< watchdog module base
+
 
     /**
-     * \brief   initializes the watchdog timer
-     * \return  returns 0 if successful
+     * @brief   Initializes the watchdog timer to 2ms
+     *
+     * @return  void
      */
     void Watchdog_Init(void)
     {
@@ -95,13 +117,17 @@ void Watchdog_IntHandler(void);
         ROM_WatchdogEnable(WATCHDOG_BASE);
 
         ROM_WatchdogIntClear(WATCHDOG_BASE);
-
-
-
     }
 
 
-
+    /**
+     * @brief   Watchdog interrupt handler, clears the watchdog interrupt.
+     *          If two times not cleared microcontroller resets.
+     *
+     * @return  void
+     *
+     * @note    Should be disabled for development/debugging
+     */
     void Watchdog_IntHandler(void)
     {
 
@@ -124,16 +150,6 @@ void Watchdog_IntHandler(void);
     #error ERROR: define setup_WATCHDOG in qc_setup.h
 #endif
 
-
-
-
-
-
-
-
-
-
-
-//=====================================================================================================
-// End of file
-//=====================================================================================================
+/*====================================================================================================*/
+/* End of file                                                                                        */
+/*====================================================================================================*/

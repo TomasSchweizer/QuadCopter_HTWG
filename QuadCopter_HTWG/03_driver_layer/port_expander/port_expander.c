@@ -1,3 +1,9 @@
+/*!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!*/
+/* NOT USED AT THE MOMENT, THEREFORE EXCLUDED FROM BUILD. TO USE INCLUDE
+ * BACK INTO BUILD
+ */
+/*!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!*/
+
 /************************************************************************
  *
  *	port_expander.c	  	Functions for Filters and Controllers

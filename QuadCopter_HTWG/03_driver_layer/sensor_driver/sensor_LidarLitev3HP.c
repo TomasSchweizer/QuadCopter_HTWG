@@ -1,16 +1,25 @@
-//=====================================================================================================
-// @file sensor_LidarLitev3HP.c
-//=====================================================================================================
-//
-// @brief API to interact with the sensor LidarLitev3HP.
-//
-// Date                 Author                      Notes
-// @date 18/12/2020     @author Tomas Schweizer     Implementation
-//
-// Source:
-// GARMIN github: https://github.com/garmin/LIDARLite_Arduino_Library
-//
-//=====================================================================================================
+/*===================================================================================================*/
+/*  sensor_LidarLitev3HP.c                                                                                 */
+/*===================================================================================================*/
+
+/*
+*   file   sensor_LidarLitev3HP.c
+*
+*   brief  API to interact with the sensor LidarLitev3HP.
+*
+*   details
+*
+*   <table>
+*   <tr><th>Date            <th>Author              <th>Notes
+*   <tr><td>18/12/2021      <td>Tomas Schweizer     <td>Implementation
+*   <tr><td>31/01/2021      <td>Tomas Schweizer     <td>Code clean up & Doxygen
+*   </table>
+*   \n
+*
+*   Sources:
+*   - GARMIN github: https://github.com/garmin/LIDARLite_Arduino_Library
+*/
+/*====================================================================================================*/
 
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                     Include File Definitions                                       */
@@ -20,7 +29,7 @@
 
 #include "sensorlib/i2cm_drv.h"
 
-#include "LidarLitev3HP_register.h"
+#include "register_maps/LidarLitev3HP_register.h"
 #include "sensor_LidarLitev3HP.h"
 
 /* ---------------------------------------------------------------------------------------------------*/
@@ -67,7 +76,7 @@ static void LidarLitev3HPCallback(void *p_LidarLitev3HPCallbackData, uint_fast8_
 /* ---------------------------------------------------------------------------------------------------*/
 
 /**
- * \brief   The callback function that is called a I2C transactions to/from the
+ * @brief   The callback function that is called a I2C transactions to/from the
  *          LidarLitev3HP has completed. Implemented as state machine.
  */
 static void LidarLitev3HPCallback(void *p_LidarLitev3HPCallbackData, uint_fast8_t ui8_i2cState)
@@ -205,7 +214,7 @@ static void LidarLitev3HPCallback(void *p_LidarLitev3HPCallbackData, uint_fast8_
 }
 
 /**
- * \brief   Initializes the LidarLitev3HP struct and write the first config register
+ * @brief   Initializes the LidarLitev3HP struct and write the first config register
  */
 uint8_t LidarLitev3HP_Init(LidarLitev3HP_s *ps_li_inst, tI2CMInstance *ps_I2CMInst,
                           uint8_t ui8_LidarLitev3HPAddress, tSensorCallback *fp_LidarLitev3HPCallback,
@@ -241,7 +250,7 @@ uint8_t LidarLitev3HP_Init(LidarLitev3HP_s *ps_li_inst, tI2CMInstance *ps_I2CMIn
 }
 
 /**
- * \brief   Starts the read of distance data from LidarLitev3HP.
+ * @brief   Starts the read of distance data from LidarLitev3HP.
  */
 uint8_t LidarLitev3HP_ReadData(LidarLitev3HP_s *ps_li_inst, tSensorCallback *fp_LidarLitev3HPCallback,
                                void *p_LidarLitev3HPCallbackData)
@@ -274,7 +283,7 @@ uint8_t LidarLitev3HP_ReadData(LidarLitev3HP_s *ps_li_inst, tSensorCallback *fp_
 }
 
 /**
- * \brief    Copies the data from the read buffer into a variable
+ * @brief    Copies the data from the read buffer into a variable
  */
 void LidarLitev3HP_GetRawData(LidarLitev3HP_s *ps_li_inst, uint16_t *ui16_distance, float *f_distance)
 {
@@ -284,22 +293,6 @@ void LidarLitev3HP_GetRawData(LidarLitev3HP_s *ps_li_inst, uint16_t *ui16_distan
 
 }
 
-//=====================================================================================================
-// End of file
-//=====================================================================================================
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+/*====================================================================================================*/
+/* End of file                                                                                        */
+/*====================================================================================================*/

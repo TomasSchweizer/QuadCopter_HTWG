@@ -1,36 +1,45 @@
-//=====================================================================================================
-// @file MadgwickAHRS.c
-//=====================================================================================================
-//
-// @brief Implementation of Madgwick's AHRS algorithm.
-//
-// Date                 Author                      Notes
-// @date 29/09/2011     @author SOH Madgwick        Initial release
-// @date 02/10/2011     @author SOH Madgwick        Optimised for reduced CPU load
-// @date 19/02/2012     @author SOH Madgwick        Magnetometer measurement is normalised
-// @date 06/12/2020     @author Tomas Schweizer     Overall changes to fit to application
-//
-// Source:
-// http://www.x-io.co.uk/node/8#open_source_ahrs_and_imu_algorithms
-// https://github.com/kriswiner/MPU9250
-//
-//=====================================================================================================
+/*===================================================================================================*/
+/*  MadgwickAHRS.c                                                                                   */
+/*===================================================================================================*/
+
+/*
+*   file   MadgwickAHRS.c
+*
+*   brief  Function for implementation of Madgwick's AHRS algorithm.
+*
+*   details
+*
+*   <table>
+*   <tr><th>Date            <th>Author              <th>Notes
+*   <tr><td>29/09/2011      <td>SOH Madgwick        <td>Initial release
+*   <tr><td>02/10/2011      <td>SOH Madgwick        <td>Optimised for reduced CPU load
+*   <tr><td>06/12/2020      <td>Tomas Schweizer     <td>Overall changes to fit to application HTWG-QC
+*   <tr><td>31/01/2021      <td>Tomas Schweizer     <td>Code clean up & Doxygen
+*   </table>
+*   \n
+*
+*   Sources:
+*   - http://www.x-io.co.uk/node/8#open_source_ahrs_and_imu_algorithms
+*   - https://github.com/kriswiner/MPU9250
+*/
+
+/*====================================================================================================*/
 
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                     Include File Definitions                                       */
 /* ---------------------------------------------------------------------------------------------------*/
-// standard libaries
+// Standard libraries
 #include <stdint.h>
 #include <math.h>
 
-// own header file
+// Drivers
 #include "MadgwickAHRS.h"
 
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                      Local Defines                                                 */
 /* ---------------------------------------------------------------------------------------------------*/
 /**
- * \brief: gain factor for Madgwick filter [longterm same as gyroscope error]
+ * @brief: gain factor for Madgwick filter [longterm same as gyroscope error]
  *         a big beta leads to fast convergence but overshoot [1.0]
  *         small beta leads to slow convergence but stable attitude estimation [0.006]
  */
@@ -51,31 +60,33 @@
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                      Local Variables                                               */
 /* ---------------------------------------------------------------------------------------------------*/
-static uint16_t ui16_counterStartUpConvergence = 0;
+static uint16_t ui16_counterStartUpConvergence = 0;     ///< Flag for fast start-up convergence
 
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                      Procedure Definitions                                         */
 /* ---------------------------------------------------------------------------------------------------*/
 
 /**
- * \brief   Update function of the Madgwick-AHRS filter.
- *          It takes accelerometer, gyroscope and magnetometer data and calculates
- *          a attitude quaternion.
+ * @brief   Update function of the Madgwick-AHRS filter.
  *
- *  \param  ax        ->       x measurement of the accelerometer
- *  \param  ay        ->       y measurement of the accelerometer
- *  \param  az        ->       z measurement of the accelerometer
- *  \param  gx        ->       x measurement of the gyroscope
- *  \param  gy        ->       y measurement of the gyroscope
- *  \param  gz        ->       z measurement of the gyroscope
- *  \param  mx        ->       x measurement of the magnetometer
- *  \param  my        ->       y measurement of the magnetometer
- *  \param  mz        ->       z measurement of the magnetometer *
+ * @details
+ * It takes accelerometer, gyroscope and magnetometer data and calculates
+ * a attitude quaternion.
  *
- *  \param  q         ->       takes the global gf_sensor_attitudeQuaternion
- *                             and overwrites it with the newly calculated one
- *  \param  qDot      ->       takes the global gf_sensor_attitudeQuaternion
- *  \param  dt        ->       sample time [0.002ms normaly]
+ *  @param  ax --> x measurement of the accelerometer
+ *  @param  ay --> y measurement of the accelerometer
+ *  @param  az --> z measurement of the accelerometer
+ *  @param  gx --> x measurement of the gyroscope
+ *  @param  gy --> y measurement of the gyroscope
+ *  @param  gz --> z measurement of the gyroscope
+ *  @param  mx --> x measurement of the magnetometer
+ *  @param  my --> y measurement of the magnetometer
+ *  @param  mz --> z measurement of the magnetometer *
+ *
+ *  @param  q -->  Takes the global gf_sensor_attitudeQuaternion
+ *                 and overwrites it with the newly calculated one
+ *  @param  qDot --> Takes the global gf_sensor_attitudeQuaternion
+ *  @param  dt --> sample time [ 2ms normally]
  *
  */
 void MadgwickAHRSupdate(float ax, float ay, float az, float gx, float gy, float gz, float mx, float my, float mz, volatile float q[4], volatile float qDot[4], float dt)
@@ -189,8 +200,6 @@ void MadgwickAHRSupdate(float ax, float ay, float az, float gx, float gy, float 
 
 }
 
-//=====================================================================================================
-// End of file
-//=====================================================================================================
-
-
+/*====================================================================================================*/
+/* End of file                                                                                        */
+/*====================================================================================================*/

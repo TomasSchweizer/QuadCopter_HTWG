@@ -1,72 +1,61 @@
 /*===================================================================================================*/
-/*  fault.h                                                                                          */
+/*  ak8963_registers.h                                                                               */
 /*===================================================================================================*/
 
 /**
-*   @file   fault.h
+*   @file   ak8963_registers.h
 *
-*   @brief  API for all fault handling/events
+*   @brief  List of used registers from ak8963 magnetometer
 *
 *   @details
-*   Fault Events can get names and counted how often they happened.
 *
 *   <table>
 *   <tr><th>Date            <th>Author              <th>Notes
-*   <tr><td>17/04/2016      <td>Tobias Grimm        <td>Implementation & last modifications through MAs
+*   <tr><td>06/12/2021      <td>Tomas Schweizer     <td>Implementation
 *   <tr><td>31/01/2021      <td>Tomas Schweizer     <td>Code clean up & Doxygen
 *   </table>
 *   \n
 *
 *   Sources:
+*   - Sensor data sheet
+*   - TivaWare sensorlib
 */
 /*====================================================================================================*/
 
-#ifndef __FAULT_H__
-#define	__FAULT_H__
+#ifndef AK8963_REGISTERS_H_
+#define AK8963_REGISTERS_H_
 
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                     Include File Definitions                                       */
 /* ---------------------------------------------------------------------------------------------------*/
 
-// Standard library
-#include <stdint.h>
-
-// Setup
-#include "qc_setup.h"
-
-// Utilities
-#include "count_edges.h"
-
-// FreeRTOS
-#include "FreeRTOS.h"
-#include "event_groups.h"
-
-
-
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                      Defines                                                       */
 /* ---------------------------------------------------------------------------------------------------*/
 
-// Fault defines for Bits in gx_fault_EventGroup (24 bits can be stored)
-// FlyStab-Task polls over this bits and decide what to do
-// Bit order is irrelevant (but in range 0 ... fault_COUNT-1)
+#define AK8963_ADDRESS              0x0C        ///< i2c address
 
-/**
- * @brief	Maximum Number of used fault eventBits (max 24)
- *
- * @note	All fault eventBits are set by default
- */
-#define fault_COUNT						( 5 )						// 24 bits max
-/** \brief	REMOTE fault eventBit */
-#define fault_REMOTE_CONTROL			( 1 << 0 )
-/** \brief	AUTOPILOT fault eventBit */
-#define fault_AUTOPILOT					( 1 << 1 )
-/** \brief	TELEMETRIE fault eventBit */
-#define fault_TELEMETRIE				( 1 << 2 )
-/** \brief	MOTOR fault eventBit */
-#define fault_MOTOR						( 1 << 3 )
-/** \brief	SENSOR fault eventBit */
-#define fault_SENSOR					( 1 << 4 )
+// registers
+#define AK8963_HXL                  0x03        ///< X-axis LSB output register
+#define AK8963_HXH                  0x04        ///< X-axis MSB output register
+#define AK8963_HYL                  0x05        ///< Y-axis LSB output register
+#define AK8963_HYH                  0x06        ///< Y-axis MSB output register
+#define AK8963_HZL                  0x07        ///< Z-axis LSB output register
+#define AK8963_HZH                  0x08        ///< Z-axis MSB output register
+#define AK8963_CNTL1                0x0A        ///< Control register
+#define AK8963_CNTL2                0x0B        ///< Control 2 register
+#define AK8963_ASTC                 0x0C        ///< Self-test register
+#define AK8963_ASAX                 0x10        ///< X-axis sensitivity register
+#define AK8963_ASAY                 0x11        ///< Y-axis sensitivity register
+#define AK8963_ASAZ                 0x12        ///< Z-axis sensitivity register
+
+// bits in registers
+#define AK8963_CNTL2_SRST           0x01        ///< Register reset
+#define AK8963_CNTL_MODE_CONT_2     0x06        ///< Continuous measurement mode 2 (100Hz)
+#define AK8963_CNTL_MODE_SELF_TEST  0x08        ///< Self-test mode
+#define AK8963_CNTL_BITM_16BIT      0x10        ///< 16-bit output
+#define AK8963_CNTL_MODE_FUSE_ROM   0x0F        ///< Fuse ROM access mode
+#define AK8963_ASTC_SELF            0x40        ///< Generate magnetic field for self-test
 
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                      Type Definitions                                              */
@@ -76,31 +65,13 @@
 /*                                      Global Variables                                              */
 /* ---------------------------------------------------------------------------------------------------*/
 
-extern volatile EventGroupHandle_t gx_fault_EventGroup;
-extern volatile countEdges_handle_p gp_fault_coundEdges;
-
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                      API Procedure Definitions                                     */
 /* ---------------------------------------------------------------------------------------------------*/
 
-extern uint32_t Fault_Init(void);
-extern void HIDE_Fault_DrawDisplay(void);
 
-#if	( setup_DEV_SUM_FAULTS ) || DOXYGEN
-	extern void HIDE_Fault_Increment(uint32_t ui32_faultEventBit,uint32_t ui32_faultBitValue);
-	extern void HIDE_Fault_SetEventName(uint32_t ui32_eventBit,const char* pc_name);
-	extern void HIDE_Fault_DrawDisplay();
-#else
-	#define HIDE_Fault_Increment(faultEventBit,faultBitValue)			// this define will be kicked off from the preprocessor
-	#define HIDE_Fault_SetEventName(ui32_eventBit,pc_name)				// this define will be kicked off from the preprocessor
-	#define HIDE_Fault_DrawDisplay								0		// 0 pointer
-#endif
-
-
-
-#endif // __FAULT_H__
+#endif /* AK8963_REGISTERS_H_ */
 
 /*====================================================================================================*/
 /* End of file                                                                                        */
 /*====================================================================================================*/
-

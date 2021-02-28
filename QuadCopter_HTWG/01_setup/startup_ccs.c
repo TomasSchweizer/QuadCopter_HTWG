@@ -1,32 +1,34 @@
-//*****************************************************************************
-//
-// startup_ccs.c - Startup code for use with TI's Code Composer Studio.
-//
-// Copyright (c) 2012-2015 Texas Instruments Incorporated.  All rights reserved.
-// Software License Agreement
-// 
-// Texas Instruments (TI) is supplying this software for use solely and
-// exclusively on TI's microcontroller products. The software is owned by
-// TI and/or its suppliers, and is protected under applicable copyright
-// laws. You may not combine this software with "viral" open-source
-// software in order to form a larger program.
-// 
-// THIS SOFTWARE IS PROVIDED "AS IS" AND WITH ALL FAULTS.
-// NO WARRANTIES, WHETHER EXPRESS, IMPLIED OR STATUTORY, INCLUDING, BUT
-// NOT LIMITED TO, IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-// A PARTICULAR PURPOSE APPLY TO THIS SOFTWARE. TI SHALL NOT, UNDER ANY
-// CIRCUMSTANCES, BE LIABLE FOR SPECIAL, INCIDENTAL, OR CONSEQUENTIAL
-// DAMAGES, FOR ANY REASON WHATSOEVER.
-// 
-// This is part of revision 2.1.1.71 of the EK-TM4C123GXL Firmware Package.
-//
-//*****************************************************************************
+/*===================================================================================================*/
+/*  startup_ccs.c                                                                                    */
+/*===================================================================================================*/
 
+/**
+*   @file   startup_ccs.c
+*
+*   @brief  Startup code for use with TI's Code Composer Studio. Put Interrupts into the NVIC
+*
+*   @details
+*   <table>
+*   <tr><th>Date            <th>Author              <th>Notes
+*   <tr><td>21/03/2016      <td>Tobias Grimm        <td>Implementation & Last modification of MAs
+*   <tr><td>14/12/2020      <td>Tomas Schweizer     <td>Added USB, Sensors, Watchdog...
+*   <tr><td>31/01/2021      <td>Tomas Schweizer     <td>Code clean up & Doxygen
+*   </table>
+*   \n
+*
+*   Sources:
+*/
+
+/*====================================================================================================*/
+
+// Standard libraries
 #include <stdint.h>
+
+// Hardware specific libraries
 #include "inc/hw_nvic.h"
 #include "inc/hw_types.h"
 
-// setup
+// Setup
 #include "peripheral_setup.h"
 #include "qc_setup.h"
 
@@ -65,37 +67,30 @@ extern void vPortSVCHandler(void);
 extern void xPortSysTickHandler(void);
 
 
-//
+
 //  Default ISRs
-//
 #define HANDLER_GPIO_PORT_E					IntDefaultHandler
 #define HANDLER_I2C1_MASTER_AND_SLAVE		IntDefaultHandler
 #define HANDLER_I2C2_MASTER_AND_SLAVE       IntDefaultHandler
 #define HANDLER_TIMER2_A                    IntDefaultHandler
 #define HANDLER_USB0                        IntDefaultHandler
-#define HANDLER_WATCHDOG                   IntDefaultHandler
+#define HANDLER_WATCHDOG                    IntDefaultHandler
 
-//
 // Watchdog ISR
-//
 #if( periph_WATCHDOG_INT == INT_WATCHDOG )
     extern void Watchdog_IntHandler(void);
     #undef HANDLER_WATCHDOG
-    #define HANDLER_WATCHDOG                   Watchdog_IntHandler
+    #define HANDLER_WATCHDOG                        Watchdog_IntHandler
 #endif
 
-//
 //  Motor ISRs
-//
 #if ( periph_MOTOR_INT == INT_I2C1 )
 	extern void Motor_I2CIntHandler(void);
 	#undef  HANDLER_I2C1_MASTER_AND_SLAVE
-	#define HANDLER_I2C1_MASTER_AND_SLAVE 		Motor_I2CIntHandler
+	#define HANDLER_I2C1_MASTER_AND_SLAVE 		    Motor_I2CIntHandler
 #endif
 
-//
 //  Sensor ISRs
-//
 #if   ( periph_SENSOR_INT == INT_I2C1 )
 	extern void Sensor_I2CIntHandler(void);
 	#undef  HANDLER_I2C1_MASTER_AND_SLAVE
@@ -108,28 +103,24 @@ extern void xPortSysTickHandler(void);
     #endif
 #endif
 
-//
 //  Remote Control ISRs
-//
 #if ( periph_REMOTE_INT   == INT_GPIOE )
 	extern void RemoteControl_CppmIntHandler(void);
 	#undef  HANDLER_GPIO_PORT_E
-	#define HANDLER_GPIO_PORT_E 				RemoteControl_CppmIntHandler
+	#define HANDLER_GPIO_PORT_E 				    RemoteControl_CppmIntHandler
 #endif
 
-//
 //  Workload ISRs
-//
 #if	( setup_DEV_WORKLOAD_CALC )
 	extern void Workload_TimeSampelIntHandler(void);
 	#undef   HANDLER_TIMER2_A
-	#define  HANDLER_TIMER2_A                   Workload_TimeSampelIntHandler
+	#define  HANDLER_TIMER2_A                       Workload_TimeSampelIntHandler
 #endif
 
-#if ( (setup_DEBUG_USB == (setup_DEBUG&setup_MASK_OPT1)) || (setup_DEBUG_UART_USB == (setup_DEBUG&setup_MASK_OPT1)))
+#if ( (setup_DEBUG_USB == (setup_DEBUG&setup_MASK_OPT1)) )
 	extern void USB0DeviceIntHandler(void);
     #undef  HANDLER_USB0
-    #define HANDLER_USB0                        USB0DeviceIntHandler
+    #define HANDLER_USB0                            USB0DeviceIntHandler
 #endif
 
 
@@ -375,3 +366,7 @@ IntDefaultHandler(void)
     {
     }
 }
+
+/*====================================================================================================*/
+/* End of file                                                                                        */
+/*====================================================================================================*/

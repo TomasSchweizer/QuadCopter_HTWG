@@ -1,17 +1,25 @@
-//=====================================================================================================
-// @file sensor_driver.h
-//=====================================================================================================
-//
-// @brief API to interact with the sensors.
-//
-// Date                 Author                      Notes
-// @date 31/05/2016     @author Tobias Grimm        Implementation
-// @date 06/12/2020     @author Tomas Schweizer     Overall changes
-//
-// Source:
-//
-//
-//=====================================================================================================
+/*===================================================================================================*/
+/*  sensor_driver.h                                                                                  */
+/*===================================================================================================*/
+
+/**
+*   @file   sensor_driver.h
+*
+*   @brief  API to interact with the sensors.
+*
+*   @details
+*
+*   <table>
+*   <tr><th>Date            <th>Author              <th>Notes
+*   <tr><td>31/05/2016      <td>Tobias Grimm        <td>Implementation & last modifications through MAs
+*   <tr><td>29/12/2020      <td>Tomas Schweizer     <td>Completely overworked because of new sensors
+*   <tr><td>31/01/2021      <td>Tomas Schweizer     <td>Code clean up & Doxygen
+*   </table>
+*   \n
+*
+*   Sources:
+*/
+/*====================================================================================================*/
 
 #ifndef __SENSOR_DRIVER_H__
 #define	__SENSOR_DRIVER_H__
@@ -20,6 +28,7 @@
 /*                                     Include File Definitions                                       */
 /* ---------------------------------------------------------------------------------------------------*/
 
+// Standard libraries
 #include <stdint.h>
 
 /* ---------------------------------------------------------------------------------------------------*/
@@ -33,16 +42,16 @@
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                      Global Variables                                              */
 /* ---------------------------------------------------------------------------------------------------*/
-//extern volatile EventGroupHandle_t gx_sensor_EventGroup;
 
-extern volatile float gf_sensor_attitudeQuaternion[4];
-extern volatile float gf_sensor_dotAttitudeQuaternion[4];
-extern float gf_sensor_fusedAngles[3];
-extern float gf_sensor_angularVelocity[3];
-extern float gf_sensor_gyroAngularVelocity[3];
-extern float gf_sensor_pressure;
-extern float gf_sensor_baroAltitude;
-extern float gf_sensor_lidarAltitude;
+extern volatile float gf_sensor_attitudeQuaternion[4];      // Global variable for attitude quaternion
+extern volatile float gf_sensor_dotAttitudeQuaternion[4];   // Global variable for derivative of attitude quaternion
+extern float gf_sensor_fusedAngles[3];                      // Global variable for fused Tait-Bryan angles [rad] (roll, pitch, yaw)
+extern float gf_sensor_angularVelocity[3];                  // Global variable for angular velocity [rad/s] calculated from quaternions
+extern float gf_sensor_gyroAngularVelocity[3];              // Global variable for angular velocity [rad/s] directly from gyroscope
+extern float gf_sensor_pressure;                            // Global variable for pressure [mPa] of barometer
+extern float gf_sensor_baroAltitude;                        // Global variable for altitude [cm] measured by barometer
+extern float gf_sensor_lidarAltitude;                       // Global variable for altitude [cm] measured by lidar
+
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                      API Procedure Definitions                                     */
 /* ---------------------------------------------------------------------------------------------------*/
@@ -61,6 +70,6 @@ extern void    HIDE_Sensor_SendDataOverUSB (void);
 
 #endif // __SENSOR_DRIVER_H__
 
-//=====================================================================================================
-// End of file
-//=====================================================================================================
+/*====================================================================================================*/
+/* End of file                                                                                        */
+/*====================================================================================================*/

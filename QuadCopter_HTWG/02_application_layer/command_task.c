@@ -1,78 +1,99 @@
-/**
- * 		@file 	command_task.c
- * 		@brief	The command Task waits for a Queue of functions and performs them.
- *//*	@author Tobias Walter
- * 		@date 	13.04.2016	(last modified)
- */
+/*===================================================================================================*/
+/*  command_task.c                                                                                   */
+/*===================================================================================================*/
 
-/* ------------------------------------------------------------ */
-/*				Include File Definitions						*/
-/* ------------------------------------------------------------ */
+/*
+*   file   command_task.c
+*
+*   brief  The command task waits for a queue of functions and performs them every 100ms
+*
+*   details
+*
+*   <table>
+*   <tr><th>Date            <th>Author              <th>Notes
+*   <tr><td>13/04/2016      <td>Tobias Walter       <td>Implementation & Last modification of MAs
+*   <tr><td>31/01/2021      <td>Tomas Schweizer     <td>Added USB functionality
+*   <tr><td>31/01/2021      <td>Tomas Schweizer     <td>Code clean up & Doxygen
+*   </table>
+*   \n
+*
+*   Sources:
+*   -
+*/
+/*====================================================================================================*/
 
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                     Include File Definitions                                       */
+/* ---------------------------------------------------------------------------------------------------*/
+
+// Standard libraries
 #include <stdbool.h>
 #include <stdint.h>
 
-// freeRTOS
+// Setup
+#include "prioritys.h"
+
+// Application
+#include "command_task.h"
+
+// Drivers
+#include "debug_interface.h"
+#include "display_driver.h"
+
+// FreeRTOS
 #include "FreeRTOS.h"
 #include "task.h"
 #include "queue.h"
 #include "timers.h"
 
-// drivers
-#include "debug_interface.h"
-#include "display_driver.h"
-
-// application
-#include "command_task.h"
-
-// utils
+// Utils
 #include "qc_math.h"
 #include "workload.h"
 #include "fault.h"
 #include "link_functions.h"
 
-// setup
-#include "prioritys.h"
 
-/* ------------------------------------------------------------ */
-/*				Local Defines									*/
-/* ------------------------------------------------------------ */
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                      Local Defines                                                 */
+/* ---------------------------------------------------------------------------------------------------*/
 
-#define COMMAND_TASK_STACK_SIZE     150         // Stack size in words
-#define COMMAND_QUEUE_LENGTH        3
-#define COMMAND_TASK_PERIOD			portMAX_DELAY
+#define COMMAND_TASK_STACK_SIZE     150                         ///< Task stack size in words
+#define COMMAND_QUEUE_LENGTH        3                           ///< Max Length of commands in the queue
+#define COMMAND_TASK_PERIOD			portMAX_DELAY               ///< Allows to block the task indefinitely
 
-#define UPDATE_TIMER_MS				100/portTICK_PERIOD_MS
+#define UPDATE_TIMER_MS				100/portTICK_PERIOD_MS      ///< Timer load value is 100ms
 
-/* ------------------------------------------------------------ */
-/*				Local Type Definitions							*/
-/* ------------------------------------------------------------ */
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                      Local Type Definitions                                        */
+/* ---------------------------------------------------------------------------------------------------*/
 
-/* ------------------------------------------------------------ */
-/*				Forward Declarations							*/
-/* ------------------------------------------------------------ */
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                      Forward Declarations                                          */
+/* ---------------------------------------------------------------------------------------------------*/
 
 static void CommandTask(void *pvParameters);
-uint32_t CommandTask_Init(void);
-void CommandTask_Insert(command_function_fp fp_handle,void *p_parameters,TickType_t xTicksToWait);
+static void UpdateStuff(void* p_parameter);
+static void UpdateTimerCallback(TimerHandle_t xTimer);
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                      Global Variables                                              */
+/* ---------------------------------------------------------------------------------------------------*/
 
-/* ------------------------------------------------------------ */
-/*				Global Variables								*/
-/* ------------------------------------------------------------ */
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                      Local Variables                                               */
+/* ---------------------------------------------------------------------------------------------------*/
 
-/* ------------------------------------------------------------ */
-/*				Local Variables									*/
-/* ------------------------------------------------------------ */
+static QueueHandle_t x_commandQueue;        ///< FreeRTOS handle for the command queue
 
-static QueueHandle_t x_commandQueue;
-
-/* ------------------------------------------------------------ */
-/*				Procedure Definitions							*/
-/* ------------------------------------------------------------ */
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                      Procedure Definitions                                         */
+/* ---------------------------------------------------------------------------------------------------*/
 
 /**
- * \brief	The command Task waits for a Queue of functions and performs them.
- * \param	pvParameters	not used
+ * @brief	The command task waits for a queue of functions and performs them.
+ *
+ * @param	pvParameters --> not used
+ *
+ * @return  void
  */
 static void CommandTask(void *pvParameters)
 {
@@ -87,9 +108,12 @@ static void CommandTask(void *pvParameters)
 }
 
 /**
- * \brief	This function will be performed from the Command Task
- *			to update non critical stuff every x ms.
- * \param	p_parameter		not used
+ * @brief	This function will be performed from the Command Task
+ *			to update non critical stuff every 100ms.
+ *
+ * @param	p_parameter --> not used
+ *
+ * @return  void
  */
 static void UpdateStuff(void* p_parameter)
 {
@@ -98,8 +122,11 @@ static void UpdateStuff(void* p_parameter)
 }
 
 /**
- * \brief	This Callback function will be performed from the RTOS Deamon Task
- * \param	xTimer		not used
+ * @brief	This Callback function will be performed from the RTOS Deamon Task
+ *
+ * @param	xTimer --> not used
+ *
+ * @return  void
  */
 static void UpdateTimerCallback(TimerHandle_t xTimer)
 {
@@ -111,54 +138,54 @@ static void UpdateTimerCallback(TimerHandle_t xTimer)
 }
 
 /**
- * \brief	use drivers to initialize peripherals for the
- *			Commandask und start the Task
- * \return	false if Task creation was successful,
- *			true  else
+ * @brief	Use drivers to initialize peripherals for the
+ *			command task and start the task.
+ *
+ * @return	false --> Task creation was successful\n
+ *			true --> Task creation was not successful
  */
 uint32_t CommandTask_Init(void)
 {
+    // Initializes Display
 	HIDE_Display_Init();
-	// gets kicked from compiler if uart is not choosen
+
+	//Initializes UART debug interface
 	HIDE_Debug_InterfaceInit();
 
-	// TODO initalize USB debug interface
+	// Initializes USB debug interface
 	HIDE_Debug_USB_InterfaceInit();
 
+	// Inits development display
 	#if ( setup_DEV_DISPLAY )
 		HIDE_Display_InsertDrawFun(HIDE_Workload_DrawDisplay);
 		HIDE_Display_InsertDrawFun(HIDE_Fault_DrawDisplay);
 	#endif
 
-	//
-	// Create a timer, which inserts every x ms a UpdateFunktion into the Command Queue
-	// TODO add USB as alternative why the timer is used
+
+	// Create a timer, which inserts every 100 ms a update funktion into the command queue
 	#if ( setup_DISPLAY_NONE!=(setup_DISPLAY&setup_MASK_OPT1) || setup_DEV_PID_TUNE )
 
-		TimerHandle_t xTimer = xTimerCreate(		// create a timer to update stuff every x ms
-						   "",						// timer name (not used)
-		                   UPDATE_TIMER_MS,			// period of the timer
-						   pdTRUE,					// use auto reload
-						   ( void * ) 0,			// timer ID
-						   UpdateTimerCallback );	// timer callback function
+		TimerHandle_t xTimer = xTimerCreate(		// Create a timer to update stuff every x ms
+						   "",						// Timer name (not used)
+		                   UPDATE_TIMER_MS,			// Period of the timer
+						   pdTRUE,					// Use auto reload
+						   ( void * ) 0,			// Timer ID
+						   UpdateTimerCallback );	// Timer callback function
 		if( xTimer == math_NULL )
 			return true;
 		if( xTimerStart( xTimer, 0 ) != pdPASS )
 			return true;
 	#endif
 
-	//
-	// Create the Queue
-	//
+	// Create the queue
 	x_commandQueue = xQueueCreate ( COMMAND_QUEUE_LENGTH, sizeof(command_handle_s) );
 	if (x_commandQueue == 0)
         return(true);
 
 
 	TaskHandle_t  x_TaskHandle;
-    //
+
     // Create the command Task.
-    //
     if(xTaskCreate(CommandTask,"CommandTask", COMMAND_TASK_STACK_SIZE, math_NULL,
                    tskIDLE_PRIORITY + priority_COMMAND_TASK, &x_TaskHandle) != pdTRUE)
     {
@@ -171,10 +198,14 @@ uint32_t CommandTask_Init(void)
 }
 
 /**
- * \brief	Writtes a command(function) in to the command queue.
- * \param	fp_handle       Pointer to the function which is inserted in the command queue.
- * \param	p_parameters    Pointer of the parameter of the function which is inserted in the command queue.
- * \param	xTicksToWait	portMAX_DELAY for Blocking, 0 for non-Blocking
+ * @brief	Writes a command (function) to the command queue.
+ *
+ * @param	fp_handle --> Pointer to the function which is inserted in the command queue.
+ * @param	p_parameters --> Pointer of the parameter of the function which is inserted in the command queue.
+ * @param	xTicksToWait --> portMAX_DELAY for Blocking, 0 for non-Blocking
+ *
+ * @return  void
+ *
  */
 void CommandTask_Insert(command_function_fp fp_handle,void *p_parameters,TickType_t xTicksToWait)
 {
@@ -182,3 +213,7 @@ void CommandTask_Insert(command_function_fp fp_handle,void *p_parameters,TickTyp
 	xQueueSend(x_commandQueue, &s_commandInsert , xTicksToWait);
 
 }
+
+/*====================================================================================================*/
+/* End of file                                                                                        */
+/*====================================================================================================*/

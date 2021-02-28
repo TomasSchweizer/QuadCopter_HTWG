@@ -1,16 +1,25 @@
-//=====================================================================================================
-// @file sensor_ms5611.c
-//=====================================================================================================
-//
-// @brief API to interact with the sensors.
-//
-// Date                 Author                      Notes
-// @date 06/12/2020     @author Tomas Schweizer     Implementation
-//
-// Source:
-// YMCA-Quadcopter: http://www.brokking.net/ymfc-32_auto_main.html
-//
-//=====================================================================================================
+/*===================================================================================================*/
+/*  sensor_ms5611.c                                                                                 */
+/*===================================================================================================*/
+
+/*
+*   @file    sensor_ms5611.c
+*
+*   @brief   API to interact with the sensor ms5611.
+*
+*   @details
+*
+*   <table>
+*   <tr><th>Date            <th>Author              <th>Notes
+*   <tr><td>06/12/2021      <td>Tomas Schweizer     <td>Implementation
+*   <tr><td>31/01/2021      <td>Tomas Schweizer     <td>Code clean up & Doxygen
+*   </table>
+*   \n
+*
+*   Sources:
+*   - YMCA-Quadcopter: http://www.brokking.net/ymfc-32_auto_main.html
+*/
+/*====================================================================================================*/
 
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                     Include File Definitions                                       */
@@ -21,7 +30,7 @@
 #include "sensorlib/i2cm_drv.h"
 #include "busy_delay.h"
 
-#include "ms5611_registers.h"
+#include "register_maps/ms5611_registers.h"
 
 #include "sensor_ms5611.h"
 
@@ -79,7 +88,7 @@ static uint8_t ui8_MS5611InitSequenceCounter = 0;
 /* ---------------------------------------------------------------------------------------------------*/
 
 /**
- * \brief   The callback function that is called a I2C transactions to/from the
+ * @brief   The callback function that is called a I2C transactions to/from the
  *          MS5611 has completed. Implemented as state machine.
  */
 static void MS5611Callback(void *p_MS5611CallbackData, uint_fast8_t ui8_i2cState)
@@ -283,7 +292,7 @@ static void MS5611Callback(void *p_MS5611CallbackData, uint_fast8_t ui8_i2cState
 }
 
 /**
- * \brief   Initializes the MS5611 struct and requests a reset
+ * @brief   Initializes the MS5611 struct and requests a reset
  */
 uint8_t MS5611_Init(MS5611_s *ps_ms_inst, tI2CMInstance *ps_I2CMInst, uint8_t ui8_MS5611Address,
                            tSensorCallback *fp_MS5611Callback, void *p_MS5611CallbackData)
@@ -317,7 +326,7 @@ uint8_t MS5611_Init(MS5611_s *ps_ms_inst, tI2CMInstance *ps_I2CMInst, uint8_t ui
 }
 
 /**
- * \brief   Starts the read of barometer temp or pressure data from the MS5611
+ * @brief   Starts the read of barometer temp or pressure data from the MS5611
  */
 uint8_t MS5611_ReadData(MS5611_s *ps_ms_inst, tSensorCallback *fp_MS5611Callback,
                         void *p_MS5611CallbackData, uint8_t ui8_MS5611ReadSequence)
@@ -365,7 +374,7 @@ uint8_t MS5611_ReadData(MS5611_s *ps_ms_inst, tSensorCallback *fp_MS5611Callback
 }
 
 /**
- * \brief   Can be called after Init function was called copies the MS5611 calibration values
+ * @brief   Can be called after Init function was called copies the MS5611 calibration values
  *          out of the buffer into int16 variables
  */
 void MS5611_GetCalibrationValues(MS5611_s *ps_ms_inst, uint16_t *ui16_baroCalValues){
@@ -454,7 +463,6 @@ uint8_t MS5611_GetRawData(MS5611_s *ps_ms_inst, MS5611_rawData_s *s_rawData)
     }
 }
 
-
-//=====================================================================================================
-// End of file
-//=====================================================================================================
+/*====================================================================================================*/
+/* End of file                                                                                        */
+/*====================================================================================================*/

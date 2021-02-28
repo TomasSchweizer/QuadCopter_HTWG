@@ -1,49 +1,56 @@
-/**
- * 		@file 	count_edges.c
- * 		@brief	count the edges in different signals.
- *
- *  			counting method can be rising-, falling-, or both edges.
- *  			every signal can have a name.
- *//*
- * 		     -------
- *	sig0:	0|1 1 1|0 0 0		countEdges_METHOD_RISING:  1
- *         ---     ------
- *
- * 		     ------- -----
- *	sig1:	0|1 1 1|0|1 1		countEdges_METHOD_FALLING: 1
- *         ---     ---
- *
- * 		     ------- ---
- *	sig2:	0|1 1 1|0|1|0		countEdges_METHOD_BOTH:    4
- *         ---     --- ---
- *  ...
- *
- * 		author 	Tobias Grimm
- * 		date 	23.04.2016	(last modified)
- */
+/*===================================================================================================*/
+/*  count_edges.c                                                                                    */
+/*===================================================================================================*/
 
+/*
+*   file   count_edges.c
+*
+*   brief  Implementation of functions to count edges of different signals.
+*
+*   @details
+*   Counting method can be rising, falling, or both edges.
+*   Every signal can have a name.\n
+*
+*   sig0:   0|1 1 1|0 0 0       countEdges_METHOD_RISING:  1\n
+*
+*   sig1:   0|1 1 1|0|1 1       countEdges_METHOD_FALLING: 1\n
 
-/* ------------------------------------------------------------ */
-/*				Include File Definitions						*/
-/* ------------------------------------------------------------ */
+*   sig2:   0|1 1 1|0|1|0       countEdges_METHOD_BOTH:    4\n
+*
+*   \n
+*
+*   <table>
+*   <tr><th>Date            <th>Author              <th>Notes
+*   <tr><td>23/04/2016      <td>Tobias Grimm        <td>Implementation & last modifications through MAs
+*   <tr><td>31/01/2021      <td>Tomas Schweizer     <td>Code clean up & Doxygen
+*   </table>
+*   \n
+*
+*   Sources:
+*/
+/*====================================================================================================*/
 
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                     Include File Definitions                                       */
+/* ---------------------------------------------------------------------------------------------------*/
 
+// Standard library
 #include <stdint.h>
 
-// freeRTOS
+// FreeRTOS
 #include "FreeRTOS.h"		// for pvPortMalloc
 
-// utils
+// Utilities
 #include "qc_math.h"
 #include "count_edges.h"
 
-/* ------------------------------------------------------------ */
-/*				Local Defines									*/
-/* ------------------------------------------------------------ */
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                      Local Defines                                                 */
+/* ---------------------------------------------------------------------------------------------------*/
 
-/* ------------------------------------------------------------ */
-/*				Local Type Definitions							*/
-/* ------------------------------------------------------------ */
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                      Local Type Definitions                                        */
+/* ---------------------------------------------------------------------------------------------------*/
 
 typedef struct countEdges_s{
 	uint8_t   		ui8_length;		/**< length of the arrays */
@@ -52,9 +59,9 @@ typedef struct countEdges_s{
 	const char** 	pc_name;		/**< Array for names of the signals */
 }countEdges_s;
 
-/* ------------------------------------------------------------ */
-/*				Forward Declarations							*/
-/* ------------------------------------------------------------ */
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                      Forward Declarations                                          */
+/* ---------------------------------------------------------------------------------------------------*/
 
 countEdges_handle_p CountEdges_Create(uint8_t ui8_length);
 void CountEdges_Reset(countEdges_handle_p p_handle);
@@ -63,22 +70,24 @@ void CountEdges_Increment(countEdges_handle_p p_handle, uint8_t ui8_sigNum);
 uint8_t CountEdges_Get(countEdges_handle_p p_handle, uint8_t ui8_sigNum);
 uint8_t CountEdges_Bit2Num(uint32_t ui32_bit);
 
-/* ------------------------------------------------------------ */
-/*				Global Variables								*/
-/* ------------------------------------------------------------ */
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                      Global Variables                                              */
+/* ---------------------------------------------------------------------------------------------------*/
 
-/* ------------------------------------------------------------ */
-/*				Local Variables									*/
-/* ------------------------------------------------------------ */
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                      Local Variables                                               */
+/* ---------------------------------------------------------------------------------------------------*/
 
-/* ------------------------------------------------------------ */
-/*				Procedure Definitions							*/
-/* ------------------------------------------------------------ */
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                      Procedure Definitions                                         */
+/* ---------------------------------------------------------------------------------------------------*/
 
 /**
- * \brief	create an instance of coundEdges
- * \param	ui8_length   Max. Count of the Signals to observe
- * \return	handle to the coundEdges instance
+ * @brief	Create an instance of coundEdges
+ *
+ * @param	ui8_length --> Max. Count of the Signals to observe
+ *
+ * @return	countEdges_handle_p --> Handle to the coundEdges instance
  */
 countEdges_handle_p CountEdges_Create(uint8_t ui8_length)
 {
@@ -105,10 +114,13 @@ countEdges_handle_p CountEdges_Create(uint8_t ui8_length)
 }
 
 /**
- * \brief	store a constant name for a desired signal
- * \param	p_handle   	handle to the coundEdges instance
- * \param	ui8_sigNum	Signal Number (from 0 to length-1)
- * \param	pc_name		constant name for the Signal
+ * @brief	Store a constant name for a desired signal
+ *
+ * @param	p_handle --> Handle to the coundEdges instance
+ * @param	ui8_sigNum --> Signal Number (from 0 to length-1)
+ * @param	pc_name -->	Constant name for the Signal
+ *
+ * @return  void
  */
 void CountEdges_SetName(countEdges_handle_p p_handle, uint8_t ui8_sigNum,const char* pc_name)
 {
@@ -117,10 +129,12 @@ void CountEdges_SetName(countEdges_handle_p p_handle, uint8_t ui8_sigNum,const c
 }
 
 /**
- * \brief	return the desired constant name of a signal
- * \param	p_handle   	handle to the coundEdges instance
- * \param	ui8_sigNum	Signal Number (from 0 to length-1)
- * \return	the desired constant name of a signal
+ * @brief	Return the desired constant name of a signal
+ *
+ * @param	p_handle --> Handle to the coundEdges instance
+ * @param	ui8_sigNum --> Signal Number (from 0 to length-1)
+ *
+ * @return	const char* --> The desired constant name of a signal
  */
 const char* CountEdges_GetName(countEdges_handle_p p_handle, uint8_t ui8_sigNum)
 {
@@ -129,10 +143,11 @@ const char* CountEdges_GetName(countEdges_handle_p p_handle, uint8_t ui8_sigNum)
 }
 
 /**
- * \brief	reset the edge cound of all Signals
+ * @brief	Reset the edge count of all signals the stored old value will be reset, too.
  *
- * 			the stored old value will be reset, too.
- * \param	p_handle   	handle to the coundEdges instance
+ * @param	p_handle --> Handle to the coundEdges instance
+ *
+ * @return  void
  */
 void CountEdges_Reset(countEdges_handle_p p_handle)
 {
@@ -146,15 +161,19 @@ void CountEdges_Reset(countEdges_handle_p p_handle)
 }
 
 /**
- * \brief	increment the counter if the desired event happens
+ * @brief	Increment the counter if the desired event happens.
  *
- * 			this method should be called periodically to update the cound of a desired edge.
- *			if the ui8_method and the ui8_sigValue value math to each other, the desired ui8_sigNum will be incremented.
- *			e.g. if there is a rising edge -> increment, else do nothing
- * \param	p_handle   		handle to the coundEdges instance
- * \param	ui8_sigNum		Signal Number (from 0 to length-1)
- * \param	ui8_sigValue	Signal Value  (0 or 1)
- * \param	ui8_method		see defines in cound_edges.h
+ * @details
+ * This method should be called periodically to update the count of a desired edge.
+ * If the ui8_method and the ui8_sigValue value match to each other,
+ * the desired ui8_sigNum will be incremented. e.g. if there is a rising edge -> increment, else do nothing
+ *
+ * @param	p_handle --> Handle to the coundEdges instance
+ * @param	ui8_sigNum --> Signal number (from 0 to length-1)
+ * @param	ui8_sigValue --> Signal value  (0 or 1)
+ * @param	ui8_method --> See defines in cound_edges.h
+ *
+ * @return  void
  */
 void CountEdges_Update(countEdges_handle_p p_handle, uint8_t ui8_sigNum, uint8_t ui8_sigValue, uint8_t ui8_method)
 {
@@ -172,9 +191,12 @@ void CountEdges_Update(countEdges_handle_p p_handle, uint8_t ui8_sigNum, uint8_t
 }
 
 /**
- * \brief	increment the desired edge counter
- * \param	p_handle   		handle to the coundEdges instance
- * \param	ui8_sigNum		Signal Number (from 0 to length-1)
+ * @brief	Increment the desired edge counter
+ *
+ * @param	p_handle --> Handle to the coundEdges instance
+ * @param	ui8_sigNum --> Signal Number (from 0 to length-1)
+ *
+ * @return  void
  */
 void CountEdges_Increment(countEdges_handle_p p_handle, uint8_t ui8_sigNum)
 {
@@ -184,9 +206,12 @@ void CountEdges_Increment(countEdges_handle_p p_handle, uint8_t ui8_sigNum)
 
 
 /**
- * \brief	get the edge count of the desired signal
- * \param	p_handle   	handle to the coundEdges instance
- * \param	ui8_bitNum	the number of the bit, which is set (see CountEdges_Bit2Num)
+ * @brief	Get the edge count of the desired signal
+ *
+ * @param	p_handle --> Handle to the coundEdges instance
+ * @param	ui8_bitNum --> The number of the bit, which is set (see CountEdges_Bit2Num)
+ *
+ * @return  uint8_t --> Sum of count edges for the desired signal
  */
 uint8_t CountEdges_Get(countEdges_handle_p p_handle, uint8_t ui8_bitNum)
 {
@@ -195,12 +220,15 @@ uint8_t CountEdges_Get(countEdges_handle_p p_handle, uint8_t ui8_bitNum)
 }
 
 /**
- * \brief	convert bit 2 number
+ * @brief	Convert bit to number
  *
- *		e.g. bitDefine: 0100 -> return 2
- *			 bitDefine: 0001 -> return 0
- * \param	ui32_bit   		a bit define
- * \return	the number of the bit, which is set
+ * @details
+ * bitDefine: 0100 -> return 2\n
+ * bitDefine: 0001 -> return 0
+ *
+ * @param	ui32_bit --> A bit define
+ *
+ * @return	uint8_t --> The number of the bit, which is set
  */
 uint8_t CountEdges_Bit2Num(uint32_t ui32_bit)
 {
@@ -209,3 +237,7 @@ uint8_t CountEdges_Bit2Num(uint32_t ui32_bit)
 		i++;
 	return i;
 }
+
+/*====================================================================================================*/
+/* End of file                                                                                        */
+/*====================================================================================================*/

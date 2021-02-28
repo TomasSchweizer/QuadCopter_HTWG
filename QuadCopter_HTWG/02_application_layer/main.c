@@ -1,48 +1,85 @@
+/*===================================================================================================*/
+/*  main.c                                                                                           */
+/*===================================================================================================*/
+
 /**
- * 		@file 	main.c
- * 		@brief	initializes the System and start all Tasks
- *//*	@author Tobias Grimm
- * 		@date 	21.03.2016	(last modified)
- */
+*   @file main.c
+*
+*   @brief Initializes the system, the tasks, the watchdog and starts the FreeRTOS scheduler.
+*
+*   @details
+*   <table>
+*   <tr><th>Date            <th>Author              <th>Notes
+*   <tr><td>21/03/2016      <td>Tobias Grimm        <td>Implementation & Last modification of MAs
+*   <tr><td>14/12/2020      <td>Tomas Schweizer     <td>Added Watchdog
+*   <tr><td>31/01/2021      <td>Tomas Schweizer     <td>Code clean up & Doxygen
+*   </table>
+*   \n
+*
+*   Sources:
+*/
 
+/*====================================================================================================*/
 
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                     Include File Definitions                                       */
+/* ---------------------------------------------------------------------------------------------------*/
 
-/* ------------------------------------------------------------ */
-/*				Include File Definitions						*/
-/* ------------------------------------------------------------ */
-
-#include <stdbool.h>
+// Standard libraries
 #include <stdint.h>
+#include <stdbool.h>
 
-// Hardware Specific
+// Hardware specific libraries
 #include "driverlib/rom.h"
 #include "driverlib/sysctl.h"
+
+// Setup
+#include "qc_setup.h"
+
+// Application
+#include "flight_task.h"
+#include "receiver_task.h"
+#include "command_task.h"
+#include "watchdog.h"
+
+// Driver
 #include "debug_interface.h"
 
 // FreeRTOS
 #include "FreeRTOS.h"
 #include "task.h"
 
-// application
-#include "flight_task.h"
-#include "receiver_task.h"
-#include "command_task.h"
-#include "watchdog.h"
-
-// utils
+// Utilities
 #include "workload.h"
 #include "fault.h"
 
-// setup
-#include "qc_setup.h"
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                      Local Defines                                                 */
+/* ---------------------------------------------------------------------------------------------------*/
 
-/* ------------------------------------------------------------ */
-/*				Procedure Definitions							*/
-/* ------------------------------------------------------------ */
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                      Local Type Definitions                                        */
+/* ---------------------------------------------------------------------------------------------------*/
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                      Forward Declarations                                          */
+/* ---------------------------------------------------------------------------------------------------*/
+
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                      Global Variables                                              */
+/* ---------------------------------------------------------------------------------------------------*/
+
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                      Local Variables                                               */
+/* ---------------------------------------------------------------------------------------------------*/
+
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                      Procedure Definitions                                         */
+/* ---------------------------------------------------------------------------------------------------*/
 
 /**
- * \brief	initializes the System and start all Tasks
- * \return	this should never happen
+ * @brief   Initializes the system, the tasks, the watchdog and starts the FreeRTOS scheduler.
+ *
+ * @return  exit --> returns the exit code of the operating system
  */
 int main(void)
 {
@@ -52,10 +89,7 @@ int main(void)
 	// Wait for clock to stabilize
 	ROM_SysCtlDelay(ROM_SysCtlClockGet() / 12);
 
-
-	//
-	//	Default Applications
-	//
+	// Default applications
 	if(Fault_Init())
 		while(1);
 	if(ReceiverTask_Init())
@@ -63,27 +97,24 @@ int main(void)
 	if(CommandTask_Init())
 		while(1);
 
-	//  DEV INITs
+	// DEV INITs
 	HIDE_Workload_Init();
 	HIDE_Debug_PinsInit();
 
-	//
-	//  QC_BASIC
-	//
+	// QC_BASIC
 	#if ( setup_QC_BASIC )
 
 		if(FlightTask_Init())
 			while(1);
 	#endif
 
-
-    // Enable All Interrupts
+    // Enable all interrupts
     ROM_IntMasterEnable();
 
-    // Initialize and start watchdog deactivate for debugging
+    // Initialize and start watchdog !!! COMMENT OUT FOR DEBUGGING !!!
     //Watchdog_Init();
 
-    // Start the scheduler.  This should not return.
+    // Start the scheduler and runs in a endless loop
     vTaskStartScheduler();
 
     // In case the scheduler returns for some reason, loop forever.
@@ -91,9 +122,13 @@ int main(void)
 }
 
 /**
- * \brief	This hook is called by FreeRTOS when an stack overflow error is detected.
- * \param	pxTask		the task where the stack overflow happened
- * \param 	pcTaskName	the name of the task where the stack overflow happened
+ * @brief   This hook is called by FreeRTOS when an stack overflow error is detected.
+ *
+ * @param	pxTask		The task where the stack overflow occurred
+ * @param 	pcTaskName	The name of the task where the stack overflow occurred
+ *
+ * @return  void
+ *
  */
 void vApplicationStackOverflowHook(xTaskHandle *pxTask, char *pcTaskName)
 {
@@ -106,3 +141,7 @@ void vApplicationStackOverflowHook(xTaskHandle *pxTask, char *pcTaskName)
     {
     }
 }
+
+/*====================================================================================================*/
+/* End of file                                                                                        */
+/*====================================================================================================*/

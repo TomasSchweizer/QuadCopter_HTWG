@@ -53,9 +53,11 @@
 									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/02_application_layer&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/02_application_layer/flight_basic&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/03_driver_layer&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/03_driver_layer/sensor_driver/register_maps&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/03_driver_layer/sensor_driver&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/03_driver_layer/display_driver&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/03_driver_layer/display_driver/src&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/03_driver_layer/debug_interface/usb_utilities&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/03_driver_layer/debug_interface&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/05_utilities&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/04_free_rtos/Source/include&quot;"/>

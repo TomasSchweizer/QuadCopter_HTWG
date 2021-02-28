@@ -1,34 +1,47 @@
-/**
- * 		@file 	link_functions.c
- * 		@brief	link functions together (linked list)
- *
- *  			and run all linked funktions
- *//*	@author Tobias Grimm
- * 		@date 	15.05.2016	(last modified)
- */
+/*===================================================================================================*/
+/*  link_functions.c                                                                                 */
+/*===================================================================================================*/
 
+/*
+*   file   link_functions.c
+*
+*   brief  Implementation of functions to link functions together (Linked list)
+*
+*   details
+*   Multiple functions can be linked together and run all at once
+*
+*   <table>
+*   <tr><th>Date            <th>Author              <th>Notes
+*   <tr><td>15/05/2016      <td>Tobias Grimm        <td>Implementation & last modifications through MAs
+*   <tr><td>31/01/2021      <td>Tomas Schweizer     <td>Code clean up & Doxygen
+*   </table>
+*   \n
+*
+*   Sources:
+*/
+/*====================================================================================================*/
 
-/* ------------------------------------------------------------ */
-/*				Include File Definitions						*/
-/* ------------------------------------------------------------ */
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                     Include File Definitions                                       */
+/* ---------------------------------------------------------------------------------------------------*/
 
-
+// Standard library
 #include <stdint.h>
 
-// freeRTOS
+// FreeRTOS
 #include "FreeRTOS.h"		// for pvPortMalloc
 
-// utils
+// Utilities
 #include "qc_math.h"
 #include "link_functions.h"
 
-/* ------------------------------------------------------------ */
-/*				Local Defines									*/
-/* ------------------------------------------------------------ */
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                      Local Defines                                                 */
+/* ---------------------------------------------------------------------------------------------------*/
 
-/* ------------------------------------------------------------ */
-/*				Local Type Definitions							*/
-/* ------------------------------------------------------------ */
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                      Local Type Definitions                                        */
+/* ---------------------------------------------------------------------------------------------------*/
 
 typedef struct linkFun_s
  {
@@ -36,33 +49,36 @@ typedef struct linkFun_s
      struct linkFun_s*  ps_next; 	/**< pointer to the next element (linked List) */
  }linkFun_s;
 
-/* ------------------------------------------------------------ */
-/*				Forward Declarations							*/
-/* ------------------------------------------------------------ */
+ /* ---------------------------------------------------------------------------------------------------*/
+ /*                                      Forward Declarations                                          */
+ /* ---------------------------------------------------------------------------------------------------*/
 
-/* ------------------------------------------------------------ */
-/*				Global Variables								*/
-/* ------------------------------------------------------------ */
+ /* ---------------------------------------------------------------------------------------------------*/
+ /*                                      Global Variables                                              */
+ /* ---------------------------------------------------------------------------------------------------*/
 
-/* ------------------------------------------------------------ */
-/*				Local Variables									*/
-/* ------------------------------------------------------------ */
+ /* ---------------------------------------------------------------------------------------------------*/
+ /*                                      Local Variables                                               */
+ /* ---------------------------------------------------------------------------------------------------*/
 
-/* ------------------------------------------------------------ */
-/*				Procedure Definitions							*/
-/* ------------------------------------------------------------ */
+ /* ---------------------------------------------------------------------------------------------------*/
+ /*                                      Procedure Definitions                                         */
+ /* ---------------------------------------------------------------------------------------------------*/
 
  /**
-  * \brief	insert a function into the linkFun_handle_p instance (linked List)
-  * \param	pp_handle	pointer to handle of the LinkFunction instance
-  *	\param	fp_fun		function to insert
+  * @brief  Insert a function into the linkFun_handle_p instance (linked list)
+  *
+  * @param	pp_handle --> Pointer to handle of the LinkFunction instance
+  *	@param	fp_fun --> Function to insert
+  *
+  *	@return void
   */
 void LinkFun_Insert(linkFun_handle_p* pp_handle, linkFun_fp fp_fun)
 {
 	linkFun_s ** pps_linkFun = (linkFun_s **) pp_handle;
 	linkFun_s *  ps_newLinkFun;
 
-	// walk to the end of the linked List
+	// Walk to the end of the linked List
     while( *pps_linkFun != math_NULL )
         pps_linkFun = &(*pps_linkFun)->ps_next;
 
@@ -74,8 +90,11 @@ void LinkFun_Insert(linkFun_handle_p* pp_handle, linkFun_fp fp_fun)
 }
 
 /**
- * \brief	run all linked functions
- * \param	p_handle	handle to the LinkFunction instance
+ * @brief	Run all linked functions
+ *
+ * @param	p_handle --> Handle to the LinkFunction instance
+ *
+ * @return  void
  */
 void LinkFun_RunAllFun(linkFun_handle_p p_handle)
 {
@@ -83,3 +102,8 @@ void LinkFun_RunAllFun(linkFun_handle_p p_handle)
     for( ; ps_linkFun != math_NULL ; ps_linkFun = ps_linkFun->ps_next )
     	ps_linkFun->fp_fun();
 }
+
+/*====================================================================================================*/
+/* End of file                                                                                        */
+/*====================================================================================================*/
+

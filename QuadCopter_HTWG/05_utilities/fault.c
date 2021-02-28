@@ -1,81 +1,90 @@
-/**
- * 		@file 	fault.c
- * 		@brief	central place for all fault Events.
- *
- * 				Fault Events can get Names and counted how often they happened.
- *//*	@author Tobias Grimm
- * 		@date 	17.04.2016	(last modified)
- */
+/*===================================================================================================*/
+/*  fault.c                                                                                          */
+/*===================================================================================================*/
 
-/* ------------------------------------------------------------ */
-/*				Include File Definitions						*/
-/* ------------------------------------------------------------ */
+/*
+*   file   fault.c
+*
+*   brief  Implementation of functions to init, handle fault events
+*
+*   details
+*   Fault Events can get names and counted how often they happened.
+*
+*   <table>
+*   <tr><th>Date            <th>Author              <th>Notes
+*   <tr><td>17/04/2016      <td>Tobias Grimm        <td>Implementation & last modifications through MAs
+*   <tr><td>31/01/2021      <td>Tomas Schweizer     <td>Code clean up & Doxygen
+*   </table>
+*   \n
+*
+*   Sources:
+*/
+/*====================================================================================================*/
 
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                     Include File Definitions                                       */
+/* ---------------------------------------------------------------------------------------------------*/
+
+// Standard libraries
 #include <stdint.h>
 #include <stdbool.h>
 
-// freeRTOS
+// Setup
+#include "qc_setup.h"
+
+// driver
+#include "display_driver.h"
+
+// FreeRTOS
 #include "FreeRTOS.h"
 #include "task.h"
 #include "queue.h"
 #include "event_groups.h"
 
-// application
+// Utilities
 #include "fault.h"
-
-// utils
 #include "count_edges.h"
 #include "qc_math.h"
 
-// driver
-#include "display_driver.h"
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                      Local Defines                                                 */
+/* ---------------------------------------------------------------------------------------------------*/
 
-// setup
-#include "qc_setup.h"
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                      Local Type Definitions                                        */
+/* ---------------------------------------------------------------------------------------------------*/
 
-/* ------------------------------------------------------------ */
-/*				Local Defines									*/
-/* ------------------------------------------------------------ */
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                      Forward Declarations                                          */
+/* ---------------------------------------------------------------------------------------------------*/
 
-/* ------------------------------------------------------------ */
-/*				Local Type Definitions							*/
-/* ------------------------------------------------------------ */
-
-/* ------------------------------------------------------------ */
-/*				Forward Declarations							*/
-/* ------------------------------------------------------------ */
-
-/* ------------------------------------------------------------ */
-/*				Global Variables								*/
-/* ------------------------------------------------------------ */
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                      Global Variables                                              */
+/* ---------------------------------------------------------------------------------------------------*/
 
 /**
- * \brief	event bits to indicate if a fault appears
- *
- *			(see fault.h for bit order)
+ * @brief	Event bits to indicate if a fault appears, (see fault.h for bit order).
  */
 volatile EventGroupHandle_t gx_fault_EventGroup;
 
 /**
- * \brief	every event bit has a field to sum up
- *			how often it was fired (rising edge)
- *			(see fault.h & cound_edges.h)
- * \note	Write access:	a lot of tasks &| ISRs -> (this is only for development, race conditions can happen, but it is not critical.)
+ * @brief	Every event bit has a field to sum up how often it was fired (rising edge)(see fault.h & cound_edges.h)
  */
 volatile countEdges_handle_p gp_fault_coundEdges;
 
-/* ------------------------------------------------------------ */
-/*				Local Variables									*/
-/* ------------------------------------------------------------ */
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                      Local Variables                                               */
+/* ---------------------------------------------------------------------------------------------------*/
 
-/* ------------------------------------------------------------ */
-/*				Procedure Definitions							*/
-/* ------------------------------------------------------------ */
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                      Procedure Definitions                                         */
+/* ---------------------------------------------------------------------------------------------------*/
 
 /**
- * \brief	initializes fault EventGroup and set all bits by default
- * \return	false if creation was successful,
- *			true  else
+ * @brief	Initializes fault EventGroup and set all bits by default
+ *
+ * @return	false --> If creation was successful\n
+ *			true --> else
  */
 uint32_t Fault_Init(void)
 {
@@ -102,8 +111,9 @@ uint32_t Fault_Init(void)
 #if ( setup_DEV_SUM_FAULTS ) || DOXYGEN
 
 	/**
-	 * \brief	Draw info about faults on the Display
-	 * \note	to enable this HIDE function set setup_DEV_SUM_FAULTS in qc_setup.h
+	 * @brief	Draw info about faults on the Display
+	 *
+	 * @note	To enable this HIDE function set setup_DEV_SUM_FAULTS in qc_setup.h
 	 */
 	void HIDE_Fault_DrawDisplay(void)
 	{
@@ -133,13 +143,18 @@ uint32_t Fault_Init(void)
 	}
 
 	/**
-	 * \brief	increment counter for rising edges for a fault bit.
+	 * @brief	Increment counter for rising edges for a fault bit.
 	 *
-	 * 			increment in gp_fault_coundEdges at the desired bit
-	 *			if there is a rising edge in ui32_faultBitValue (0 old 1 currend)
-	 * \param	ui32_faultEventBit	see fault.h for bit defines
-	 * \param	ui32_faultBitValue	0 when bit is cleared, !=0 when bit is fired
-	 * \note	to enable this HIDE function set setup_DEV_SUM_FAULTS in qc_setup.h
+	 * @details
+	 * Increment in gp_fault_coundEdges at the desired bit,
+	 * if there is a rising edge in ui32_faultBitValue (0 old 1 current)
+	 *
+	 * @param	ui32_faultEventBit -->	see fault.h for bit defines
+	 * @param	ui32_faultBitValue -->	0 when bit is cleared, !=0 when bit is fired
+	 *
+	 * @return  void
+	 *
+	 * @note	To enable this HIDE function set setup_DEV_SUM_FAULTS in qc_setup.h
 	 */
 	void HIDE_Fault_Increment(uint32_t ui32_faultEventBit,uint32_t ui32_faultBitValue)
 	{
@@ -147,13 +162,17 @@ uint32_t Fault_Init(void)
 	}
 
 	/**
-	 * \brief	store the name of the fault eventBit into gp_fault_coundEdges
+	 * @brief	Store the name of the fault eventBit into gp_fault_coundEdges
 	 *
-	 *			(this should be performed before scheduler starts)
-	 *			e.g. in the init of the driver who fires the eventBit
-	 * \param	ui32_eventBit	the fault eventBit (see fault.h)
-	 * \param	pc_name			const string name
-	 * \note	to enable this HIDE function set setup_DEV_SUM_FAULTS in qc_setup.h
+	 * @details
+	 * This should be performed before scheduler starts, e.g. in the init of the driver who fires the eventBit
+	 *
+	 * @param	ui32_eventBit --> The fault eventBit (see fault.h)
+	 * @param	pc_name --> const string name
+	 *
+	 * @return  void
+	 *
+	 * @note	To enable this HIDE function set setup_DEV_SUM_FAULTS in qc_setup.h
 	 */
 	void HIDE_Fault_SetEventName(uint32_t ui32_eventBit,const char* pc_name)
 	{
@@ -161,3 +180,8 @@ uint32_t Fault_Init(void)
 	}
 
 #endif
+
+/*====================================================================================================*/
+/* End of file                                                                                        */
+/*====================================================================================================*/
+

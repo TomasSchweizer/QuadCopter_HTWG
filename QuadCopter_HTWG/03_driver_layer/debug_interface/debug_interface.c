@@ -1,19 +1,36 @@
-/**
- * 		@file 	debug_interface.c
- * 		@brief	The debug interface can write or read Bytes
- *  			from or to e.g. a computer.
- *//*	@author Tobias Grimm
- * 		@date 	22.03.2016	(last modified)
- */
+/*===================================================================================================*/
+/*  debug_interface.c                                                                                */
+/*===================================================================================================*/
 
-/* ------------------------------------------------------------ */
-/*				Include File Definitions						*/
-/* ------------------------------------------------------------ */
+/*
+*   file   debug_interface.c
+*
+*   brief  The debug interface allows to read and write bytes over UART or USB
+*
+*   details
+*
+*   <table>
+*   <tr><th>Date            <th>Author              <th>Notes
+*   <tr><td>08/04/2016      <td>Tobias Grimm        <td>Implementation & Last modification of MAs
+*   <tr><td>20/11/2020      <td>Tomas Schweizer     <td>Implementation of USB
+*   <tr><td>31/01/2021      <td>Tomas Schweizer     <td>Code clean up & Doxygen
+*   </table>
+*   \n
+*
+*   Sources:
+*   - TivaWare USB Bulk example
+*/
+/*====================================================================================================*/
 
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                     Include File Definitions                                       */
+/* ---------------------------------------------------------------------------------------------------*/
+
+// Standard libraries
 #include <stdint.h>
 #include <stdbool.h>
 
-//  Hardware Specific
+//  Hardware specific libraries
 #include "inc/hw_memmap.h"
 #include "driverlib/gpio.h"
 #include "driverlib/pin_map.h"
@@ -21,40 +38,35 @@
 #include "driverlib/sysctl.h"
 #include "driverlib/rom.h"
 #include "utils/uartstdio.h"
-// TODO USB new includes test
-
+#include "utils/ustdlib.h"
 // USBlib
 #include "usblib/usblib.h"
 #include "usblib/usb-ids.h"
 #include "usblib/device/usbdevice.h"
 #include "usblib/device/usbdbulk.h"
-//structs for bulk transfer
-#include "usb_bulk_structs.h"
-#include "utils/ustdlib.h"
 
-// setup
+// Setup
 #include "qc_setup.h"
 #include "peripheral_setup.h"
 #include "prioritys.h"
 
-// drivers
+// Drivers
 #include "debug_interface.h"
+#include "usb_utilities/usb_bulk_structs.h"
 
-// utils
+// Utilities
 #include "qc_math.h"
 #include "link_functions.h"
 
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                      Select Mode                                                   */
+/* ---------------------------------------------------------------------------------------------------*/
 
+#if	 ( setup_DEBUG_UART == (setup_DEBUG&setup_MASK_OPT1) )  || DOXYGEN
 
-/* ------------------------------------------------------------ */
-/*				Select the Mode									*/
-/* ------------------------------------------------------------ */
-
-#if	( (setup_DEBUG_UART == (setup_DEBUG&setup_MASK_OPT1)) || (setup_DEBUG_UART_USB == (setup_DEBUG&setup_MASK_OPT1)) ) || DOXYGEN
-
-	/* ------------------------------------------------------------ */
-	/*				Local Defines									*/
-	/* ------------------------------------------------------------ */
+	/*------------------------------------------------------------------------------------------------*/
+    /*                                     Local defines UART mode                                    */
+    /* -----------------------------------------------------------------------------------------------*/
 
 	#if ( UART0_BASE == periph_DEBUG_UART_BASE )
 		#define  TRACE_SYSCTL_PERIPH_UART	SYSCTL_PERIPH_UART0
@@ -69,13 +81,16 @@
 	#endif
 
 
-	/* ------------------------------------------------------------ */
-	/*				Procedure Definitions							*/
-	/* ------------------------------------------------------------ */
+    /* -----------------------------------------------------------------------------------------------*/
+    /*                                      Procedure Definitions UART mode                           */
+    /* -----------------------------------------------------------------------------------------------*/
 
 	/**
-	 * \brief	Init peripheral for debug interface
-	 * \note	to enable this HIDE function define setup_DEBUG in qc_setup.h
+	 * @brief	Init peripheral for debug interface
+	 *
+	 * @return void
+	 *
+	 * @note	To enable this HIDE function define setup_DEBUG in qc_setup.h
 	 */
 	void HIDE_Debug_InterfaceInit(void)
 	{
@@ -91,7 +106,7 @@
 	   // Use the internal 16MHz oscillator as the UART clock source.
 		UARTClockSourceSet(periph_DEBUG_UART_BASE, UART_CLOCK_PIOSC);
 
-		// Init des UART  9600
+		// Init UART at baudrate 9600
 		UARTStdioConfig(0, 9600, 16000000);
 
 		// Enable 16x8Bit FIFO
@@ -99,12 +114,15 @@
 	}
 
 	/**
-	 * \brief	get one byte (non blocking) from the debug peripheral
-	 *			and write it into i32_buff.
+	 * @brief	Get one byte (non blocking) from the debug peripheral
+	 *			and write it into i32_buff. If debug peripheral is empty write -1 into i32_buff.
 	 *
-	 *			if debug peripheral is empty write -1 into i32_buff.
-	 * \param	i32_buff	buffer to write in
-	 * \note	to enable this HIDE function define setup_DEBUG in qc_setup.h
+	 *
+	 * @param	i32_buff --> Buffer to write in
+	 *
+	 * @return  void
+	 *
+	 * @note	To enable this HIDE function define setup_DEBUG in qc_setup.h
 	 */
 	void HIDE_Debug_InterfaceGet(int32_t* i32_buff)
 	{
@@ -116,18 +134,19 @@
 	}
 
 	/**
-	 * \brief	write (non blocking) all elements in the array
+	 * @brief	Write (non blocking) all elements in the array
 	 *			into the debug peripheral
-	 * \param	pui8_buff	pointer to the uint8_t array
-	 * \param	ui32_count  count of elements in the array
-	 * \note	to enable this HIDE function define setup_DEBUG in qc_setup.h
+	 *
+	 * @param	pui8_buff --> Pointer to the uint8_t array
+	 * @param	ui32_count -->  Count of elements in the array
+	 *
+	 * @return  void
+	 *
+	 * @note	To enable this HIDE function define setup_DEBUG in qc_setup.h
 	 */
 	void HIDE_Debug_InterfaceSend(const uint8_t *pui8_buff, uint32_t ui32_count)
 	{
 
-//	    int p = 0;
-//	    if(!UARTBusy(periph_DEBUG_UART_BASE) || p == 0){
-//	        p++;
 		// Loop while there are more characters to send.
 	        while(ui32_count--)
 	        {
@@ -135,41 +154,53 @@
 	            // Write the next character to the UART.
 	            UARTCharPutNonBlocking(periph_DEBUG_UART_BASE, *pui8_buff++);
 	        }
-//	    }
 	}
 #endif
-// new implementation fo USB Debug TODO implement test comment
-#if ( (setup_DEBUG_USB == (setup_DEBUG&setup_MASK_OPT1)) || (setup_DEBUG_UART_USB == (setup_DEBUG&setup_MASK_OPT1)) )
 
 
-    /* ------------------------------------------------------------ */
-    /*              Local Defines                                   */
-    /* ------------------------------------------------------------ */
+#if ( setup_DEBUG_USB == (setup_DEBUG&setup_MASK_OPT1) )  || DOXYGEN
+
+
+	/*------------------------------------------------------------------------------------------------*/
+	/*                                     Local defines USB mode                                     */
+	/* -----------------------------------------------------------------------------------------------*/
 
     #if (USB0_BASE == periph_DEBUG_USB_BASE)
 	    #define TRACE_SYSCTL_PERIPH_GPIO_USB    SYSCTL_PERIPH_GPIOD
         #define TRACE_GPIO_PORT_BASE_USB        GPIO_PORTD_BASE
-        #define TRACE_GPIO_PINS_USB_ANALOG   (GPIO_PIN_4 | GPIO_PIN_5)
+        #define TRACE_GPIO_PINS_USB_ANALOG      (GPIO_PIN_4 | GPIO_PIN_5)
         #define periph_USB_INT                  INT_USB0
     #else
         #error ERROR: define setup_DEBUG (in qc_setup.h)
     #endif
 
-	static linkFun_handle_p p_debugUSBLinkFunHandle = 0;
-	static bool b_USBDeviceConnected = false;
-	static volatile uint32_t ui32_RXTransmitCounter = 0;
+	/* ------------------------------------------------------------------------------------------------*/
+    /*                                      Forward Declarations USB mode                              */
+    /* ------------------------------------------------------------------------------------------------*/
+	uint32_t TxHandler(void *pvCBData, uint32_t ui32Event, uint32_t ui32MsgValue, void *pvMsgData); ///< USB transmit handler
+	uint32_t RxHandler(void *pvCBData, uint32_t ui32Event, uint32_t ui32MsgValue, void *pvMsgData); ///< USB receive handler
 
-	uint32_t TxHandler(void *pvCBData, uint32_t ui32Event, uint32_t ui32MsgValue, void *pvMsgData);
-	uint32_t RxHandler(void *pvCBData, uint32_t ui32Event, uint32_t ui32MsgValue, void *pvMsgData);
+	/* ---------------------------------------------------------------------------------------------------*/
+    /*                                      Global Variables USB mode                                     */
+    /* ---------------------------------------------------------------------------------------------------*/
 
+    /* ---------------------------------------------------------------------------------------------------*/
+    /*                                      Local Variables USB mode                                      */
+    /* ---------------------------------------------------------------------------------------------------*/
+    static linkFun_handle_p p_debugUSBLinkFunHandle = 0;    ///< Handle for USB linked functions
+    static bool b_USBDeviceConnected = false;               ///< Flag for USB connection
+    static volatile uint32_t ui32_RXCounter = 0;            ///< Count variable for USB receive events
 
-	/* ------------------------------------------------------------ */
-    /*              Procedure Definitions                           */
-    /* ------------------------------------------------------------ */
+	/* -----------------------------------------------------------------------------------------------*/
+    /*                                      Procedure Definitions USB mode                            */
+    /* -----------------------------------------------------------------------------------------------*/
 
     /**
-     * \brief   Init peripheral for USB debug interface in Bulk transfer mode
-     * \note    to enable this HIDE function define setup_DEBUG in qc_setup.h
+     * @brief   Init peripheral for USB debug interface in bulk transfer mode
+     *
+     * @return  void
+     *
+     * @note    To enable this HIDE function define setup_DEBUG in qc_setup.h
      */
 	void HIDE_Debug_USB_InterfaceInit(void)
 	{
@@ -194,13 +225,28 @@
 
 	}
 
-	// run all usb commands
+	 /**
+     * @brief   Run all USB functions in the function handle
+     *
+     * @return  void
+     *
+     * @note    To enable this HIDE function define setup_DEBUG in qc_setup.h
+     */
 	void HIDE_Debug_USB_Com(void){
 
 	    LinkFun_RunAllFun(p_debugUSBLinkFunHandle);
 	}
 
-	// insert USB send function
+	/**
+     * @brief   Insert a USB communication function into the function handle
+     *
+     * @param   fp_com --> An USB function pointer
+     * @param   insert --> Flag if function should be inserted or not
+     *
+     * @return  void
+     *
+     * @note    To enable this HIDE function define setup_DEBUG in qc_setup.h
+     */
 	void HIDE_Debug_USB_InsertComFun(usb_com_fp fp_com, uint8_t insert){
 
 
@@ -215,16 +261,18 @@
 
 	}
 
-	//*****************************************************************************
-	    //
-	    // Function to send data over USB to PC application
-	    //
-	    // \param pv_txBuffer is the a void pointer to the array of data which should be send
-	    // \param ui32_count is the lenght/ size of the data
-	    // \param ui8_txDataType is type of data which is send
-	    //
-	    //
-	//*****************************************************************************
+
+	/**
+     * @brief   Function to send data over USB to PC application
+     *
+     * @param   pv_txBuffer --> Void pointer to the array of data which should be send
+     * @param   ui32_count --> The lenghth/ size of the data
+     * @param   ui8_txDataType --> Type of send data
+     *
+     * @return  void
+     *
+     * @note    To enable this HIDE function define setup_DEBUG in qc_setup.h
+     */
 	void HIDE_Debug_USB_InterfaceSend(void* pv_txBuffer, uint32_t ui32_count, uint8_t ui8_txDataType){
 
 	    tUSBRingBufObject sTxRing;
@@ -236,9 +284,7 @@
 
 	    if(b_USBDeviceConnected){
 
-
-
-	        // first byte is a indicator which datatype was send
+	        // First byte is a indicator which data type is send
             k = 0;
             ui8_txArraySend[k] = ui8_txDataType;
             k++;
@@ -250,11 +296,11 @@
 
                 index_n = 24; // 24 uint16 values
                 index_m = 2;  // 2 uint8 values
-                index_k = 49; // max 49 bytes
+                index_k = 49; // Max 49 bytes
 
                 i16_ui8_union i16_ui8_array[24];
 
-                // fill array with the values given to the function
+                // Fill array with the values given to the function
                 for(j= 0; j < index_n; j++){
 
                 if (j < ui32_count){
@@ -265,7 +311,7 @@
                 }
 
 
-                // fill the send array with uint8 data
+                // Fill the send array with uint8 data
                 for(n = 0; n < index_n; n++){
                     for(m = 0; m < index_m; m++){
 
@@ -281,16 +327,16 @@
                 }
                 break;
 
-            // values to send are floats
+            // Values to send are floats
             case 2: // FLOAT
 
                 index_n = 12; // 12 float values
                 index_m = 4;  // 4 uint8 values
-                index_k = 49; // max 49 bytes
+                index_k = 49; // Max 49 bytes
 
                 f_ui8_union f_ui8_array[12];
 
-                // fill array with the values given to the function
+                // Fill array with the values given to the function
                 for(j= 0; j < index_n; j++){
 
                     if (j < ui32_count){
@@ -300,7 +346,7 @@
                     }
                 }
 
-                // fill the send array with uint8 data
+                // Fill the send array with uint8 data
                 for(n = 0; n < index_n; n++){
                         for(m = 0; m < index_m; m++){
 
@@ -319,21 +365,21 @@
 	    }
 
 
-	    // flush the buffer so no faulty bytes are there
+	    // Flush the buffer so no faulty bytes are there
 	    USBBufferFlush(&g_sTxBuffer);
 
-	    // set the write index
+	    // Set the write index
 	    USBBufferInfoGet(&g_sTxBuffer, &sTxRing);
 	    ui32_WriteIndex = sTxRing.ui32WriteIndex;
 
-	    // fill the TX buffer with data and increment the write index after every byte
+	    // Fill the TX buffer with data and increment the write index after every byte
 	    int i;
 	    for(i = 0; i < sizeof(ui8_txArraySend); i++){
 	       g_pui8USBTxBuffer[ui32_WriteIndex] = ui8_txArraySend[i];
 	       ui32_WriteIndex = increment2Limit(ui32_WriteIndex, BULK_BUFFER_SIZE);
 	    }
 
-	    // indicates that the client has written data in the transmit buffer and wants to transmit it
+	    // Indicates that the client has written data in the transmit buffer and wants to transmit it
 	    USBBufferDataWritten(&g_sTxBuffer, sizeof(ui8_txArraySend));
 
 
@@ -341,132 +387,125 @@
 
 	}
 
-	// TODO Receive PID values
-	void HIDE_Debug_USB_InterfaceReceive(uint8_t pid_values_buffer[14]){
+    /**
+     * @brief   Function to receive data over USB from PC application
+     *
+     * @param   ui8_buffer --> Array to copy the received data into
+     *
+     * @return  void
+     *
+     * @note    To enable this HIDE function define setup_DEBUG in qc_setup.h
+     */
+	void HIDE_Debug_USB_InterfaceReceive(uint8_t ui8_buffer[14]){
 
 	    uint32_t ui32_readIndex;
 	    tUSBRingBufObject sRxRing;
 
 
-	    if(g_pui8USBRxBuffer[0] == 115 && ui32_RXTransmitCounter == 3)
+	    // Check if the first byte is an 's'/115 and if 3 USB receive events have occured
+	    if(g_pui8USBRxBuffer[0] == 115 && ui32_RXCounter == 3)
 	    {
+	        // Reset RX Counter
+	        ui32_RXCounter = 0;
 
-
-	        ui32_RXTransmitCounter = 0;
-
+	        // Set read index
 	        USBBufferInfoGet(&g_sRxBuffer, &sRxRing);
 	        ui32_readIndex = sRxRing.ui32ReadIndex;
 
+	        // Copy the receive buffer into other array
 	        int i;
             for(i = 0; i < 14; i++){
 
-                pid_values_buffer[i] = g_pui8USBRxBuffer[ui32_readIndex];
+                ui8_buffer[i] = g_pui8USBRxBuffer[ui32_readIndex];
                 ui32_readIndex = increment2Limit(ui32_readIndex, BULK_BUFFER_SIZE);
             }
+
+            // Delete 14 bytes out of the receive buffer, so that no faulty bytes remain
             USBBufferDataRemoved(&g_sRxBuffer, 14);
 
          }
 
 	}
 
-	//*****************************************************************************
-	//
-	// Handles bulk driver notifications related to the transmit channel (data to
-	// the USB host).
-	//
-	// \param pvCBData is the client-supplied callback pointer for this channel.
-	// \param ui32Event identifies the event we are being notified about.
-	// \param ui32MsgValue is an event-specific value.
-	// \param pvMsgData is an event-specific pointer.
-	//
-	// This function is called by the bulk driver to notify us of any events
-	// related to operation of the transmit data channel (the IN channel carrying
-	// data to the USB host).
-	//
-	// \return The return value is event-specific.
-	//
-	//*****************************************************************************
-	uint32_t TxHandler(void *pvCBData, uint32_t ui32Event, uint32_t ui32MsgValue,
-	          void *pvMsgData)
-	{
-	    return(0);
-	}
+    /**
+     * @brief   Handles bulk driver notifications related to the transmit channel (data to the USB host).
+     *
+     * @param   pvCBData --> Is the client-supplied callback pointer for this channel.
+     * @param   ui32Event  --> Identifies the event we are being notified about.
+     * @param   ui32MsgValue --> Is an event-specific value.
+     * @param   pvMsgData --> Is an event-specific pointer.
+     *
+     * @return  The return value is event-specific.
+     *
+     */
+    uint32_t TxHandler(void *pvCBData, uint32_t ui32Event, uint32_t ui32MsgValue,
+              void *pvMsgData)
+    {
+        return(0);
+    }
 
-	//*****************************************************************************
-	//
-	// Handles bulk driver notifications related to the receive channel (data from
-	// the USB host).
-	//
-	// \param pvCBData is the client-supplied callback pointer for this channel.
-	// \param ui32Event identifies the event we are being notified about.
-	// \param ui32MsgValue is an event-specific value.
-	// \param pvMsgData is an event-specific pointer.
-	//
-	// This function is called by the bulk driver to notify us of any events
-	// related to operation of the receive data channel (the OUT channel carrying
-	// data from the USB host).
-	//
-	// \return The return value is event-specific.
-	//
-	//*****************************************************************************
+
+
+    /**
+     * @brief   Handles bulk driver notifications related to the receive channel (data from the USB host).
+     *
+     * @param   pvCBData --> Is the client-supplied callback pointer for this channel.
+     * @param   ui32Event --> Identifies the event we are being notified about.
+     * @param   ui32MsgValue --> Is an event-specific value.
+     * @param   pvMsgData --> Is an event-specific pointer.
+     *
+     * @return The return value is event-specific.
+     *
+     */
 	uint32_t RxHandler(void *pvCBData, uint32_t ui32Event,
 	               uint32_t ui32MsgValue, void *pvMsgData)
 	{
-	    //
-	    // Which event are we being sent?
-	    //
+	    // Which event is being sent
 	    switch(ui32Event)
 	    {
-	        //
 	        // We are connected to a host and communication is now possible.
-	        //
 	        case USB_EVENT_CONNECTED:
 	        {
-	            //
+
 	            // Flush our buffers.
-	            //
 	            USBBufferFlush(&g_sTxBuffer);
 	            USBBufferFlush(&g_sRxBuffer);
 
+	            // Set USB device connected flag
 	            b_USBDeviceConnected = true;
 
 	            break;
 	        }
 
-	        //
 	        // The host has disconnected.
-	        //
 	        case USB_EVENT_DISCONNECTED:
 	        {
-
+	            // Set USB device connected flag
 	            b_USBDeviceConnected = false;
 
 	            break;
 	        }
 
-	        //
 	        // A new packet has been received.
-	        //
 	        case USB_EVENT_RX_AVAILABLE:
 	        {
-	            ui32_RXTransmitCounter++;
-	            if(ui32_RXTransmitCounter > 3)
+	            // increase RX counter
+	            ui32_RXCounter++;
+
+	            // if counter over 3 packets flush the receive buffer
+	            if(ui32_RXCounter > 3)
 	                USBBufferFlush(&g_sRxBuffer);
 	            break;
 	        }
 
-	        //
-	        // Ignore SUSPEND and RESUME for now.
-	        //
+	        // Ignore SUSPEND and RESUME
 	        case USB_EVENT_SUSPEND:
 	        case USB_EVENT_RESUME:
 	        {
 	            break;
 	        }
 
-	        //
 	        // Ignore all other events and return 0.
-	        //
 	        default:
 	        {
 	            break;
@@ -481,14 +520,11 @@
 #if ( setup_DEBUG_NONE == (setup_DEBUG&setup_MASK_OPT1) )
 #endif
 
-//	#error ERROR: define setup_DEBUG (in qc_setup.h)
-//#endif
-
 #if	( setup_DEV_DEBUG_PINS ) || DOXYGEN
 
-	/* ------------------------------------------------------------ */
-	/*				Local Defines									*/
-	/* ------------------------------------------------------------ */
+    /*------------------------------------------------------------------------------------------------*/
+    /*                                     Local defines debug pins                                   */
+    /* -----------------------------------------------------------------------------------------------*/
 
 	#define DEBUG_PIN1 						(periph_DEBUG_PIN1 & periph_MASK_PIN)
 	#define DEBUG_PORT1						(periph_DEBUG_PIN1 & periph_MASK_PORT)
@@ -514,17 +550,20 @@
 		#error	ERROR implement the defines above here
 	#endif
 
-	/* ------------------------------------------------------------ */
-	/*				Procedure Definitions							*/
-	/* ------------------------------------------------------------ */
+	/*------------------------------------------------------------------------------------------------*/
+	/*                                     Procedure definitions debug pins                           */
+    /* -----------------------------------------------------------------------------------------------*/
 
 	/**
-	 * \brief	Init peripheral for the debug pins
-	 * \note	to enable this HIDE function set setup_DEV_DEBUG_PINS in qc_setup.h
+	 * @brief	Init peripheral for the debug pins
+	 *
+	 * @return  void
+	 *
+	 * @note	To enable this HIDE function set setup_DEV_DEBUG_PINS in qc_setup.h
 	 */
 	void HIDE_Debug_PinsInit(void)
 	{
-		// init debug Pin 1
+		// Init debug Pin 1
 		#if(periph_NONE != periph_DEBUG_PIN1)
 			ROM_SysCtlPeripheralEnable(DEBUG_SYSCTL_PERIPH_GPIO1);
 			ROM_GPIOPinWrite(DEBUG_PORT1, DEBUG_PIN1, 0x00);
@@ -532,7 +571,7 @@
 			ROM_GPIOPinWrite(DEBUG_PORT1, DEBUG_PIN1, 0x00);
 		#endif
 
-		// init debug Pin 2
+		// Init debug Pin 2
 		#if(periph_NONE != periph_DEBUG_PIN2)
 			ROM_SysCtlPeripheralEnable(DEBUG_SYSCTL_PERIPH_GPIO2);
 			ROM_GPIOPinWrite(DEBUG_PORT2, DEBUG_PIN2, 0x00);
@@ -542,11 +581,15 @@
 	}
 
 	/**
-	 * \brief	write on the desired debug pin
-	 * \param	ui32_port	use the define debug_PIN1 or debug_PIN2 here
-	 * \param	ui8_pin		use the define debug_PIN1 or debug_PIN2 here
-	 * \param	ui8_val		use the define debug_CLEAR or debug_SET here
-	 * \note	to enable this HIDE function set setup_DEV_DEBUG_PINS in qc_setup.h
+	 * @brief	Write the desired debug pin
+	 *
+	 * @param	ui32_port --> Use the define debug_PIN1 or debug_PIN2 here
+	 * @param	ui8_pin --> Use the define debug_PIN1 or debug_PIN2 here
+	 * @param	ui8_val	--> Use the define debug_CLEAR or debug_SET here
+	 *
+	 * @return  void
+	 *
+	 * @note	to enable this HIDE function set setup_DEV_DEBUG_PINS in qc_setup.h
 	 */
 	void HIDE_Debug_PinWrite(uint32_t ui32_port,uint8_t ui8_pin,uint8_t ui8_val)
 	{

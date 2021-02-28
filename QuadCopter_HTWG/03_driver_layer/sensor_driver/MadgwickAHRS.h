@@ -1,17 +1,28 @@
-//=====================================================================================================
-// MadgwickAHRS.h
-//=====================================================================================================
-//
-// Implementation of Madgwick's AHRS algorithm.
-//
-// Date			Author          Notes
-// 29/09/2011	SOH Madgwick    Initial release
-// 02/10/2011	SOH Madgwick	Optimised for reduced CPU load
-// 06/12/2020   Tomas Schweizer Overall changes to fit to application HTWG-QC
-//
-// Source:
-// http://www.x-io.co.uk/node/8#open_source_ahrs_and_imu_algorithms
-//=====================================================================================================
+/*===================================================================================================*/
+/*  MadgwickAHRS.h                                                                                   */
+/*===================================================================================================*/
+
+/**
+*   @file   MadgwickAHRS.h
+*
+*   @brief  API for implementation of Madgwick's AHRS algorithm.
+*
+*   @details
+*
+*   <table>
+*   <tr><th>Date            <th>Author              <th>Notes
+*   <tr><td>29/09/2011      <td>SOH Madgwick        <td>Initial release
+*   <tr><td>02/10/2011      <td>SOH Madgwick        <td>Optimised for reduced CPU load
+*   <tr><td>06/12/2020      <td>Tomas Schweizer     <td>Overall changes to fit to application HTWG-QC
+*   <tr><td>31/01/2021      <td>Tomas Schweizer     <td>Code clean up & Doxygen
+*   </table>
+*   \n
+*
+*   Sources:
+*   - http://www.x-io.co.uk/node/8#open_source_ahrs_and_imu_algorithms
+*   - https://github.com/kriswiner/MPU9250
+*/
+/*====================================================================================================*/
 
 #ifndef __MADGWICKAHRS_H__
 #define __MADGWICKAHRS_H__
@@ -40,6 +51,6 @@ extern void MadgwickAHRSupdate(float ax, float ay, float az, float gx, float gy,
 
 #endif  // __MADGWICKAHRS_H__
 
-//=====================================================================================================
-// End of file
-//=====================================================================================================
+/*====================================================================================================*/
+/* End of file                                                                                        */
+/*====================================================================================================*/

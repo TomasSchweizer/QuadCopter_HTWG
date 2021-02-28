@@ -1,98 +1,100 @@
-//=====================================================================================================
-// @file sensor_driver.c
-//=====================================================================================================
-//
-// @brief API to interact with the sensors.
-//
-// Date                 Author                      Notes
-// @date 31/05/2016     @author Tobias Grimm        Implementation
-// @date 06/12/2020     @author Tomas Schweizer     Overall changes
-//
-// Source:
-//
-//
-//=====================================================================================================
+/*===================================================================================================*/
+/*  sensor_driver.c                                                                                  */
+/*===================================================================================================*/
+
+/*
+*   file   sensor_driver.c
+*
+*   brief  Implementation of sensor initialization, reading, calibration and fusion.
+*
+*   details
+*
+*   <table>
+*   <tr><th>Date            <th>Author              <th>Notes
+*   <tr><td>31/05/2016      <td>Tobias Grimm        <td>Implementation & last modifications through MAs
+*   <tr><td>29/12/2020      <td>Tomas Schweizer     <td>Completely overworked because of new sensors
+*   <tr><td>31/01/2021      <td>Tomas Schweizer     <td>Code clean up & Doxygen
+*   </table>
+*   \n
+*
+*   Sources:
+*/
+/*====================================================================================================*/
 
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                     Include File Definitions                                       */
 /* ---------------------------------------------------------------------------------------------------*/
+
+// Standard libraries
 #include <stdint.h>
 #include <math.h>
 
-// own header file
-#include "sensor_driver.h"
-
-// setup
+// Setup
 #include "peripheral_setup.h"
 #include "prioritys.h"
 
-// drivers
+// Drivers
+#include "sensor_driver.h"
 #include "display_driver.h"
 #include "debug_interface.h"
 #include "MadgwickAHRS.h"
 #include "basic_filters.h"
-
-// utils
-#include "qc_math.h"
-#include "workload.h"
-#include "fault.h"
-#include "busy_delay.h"
 
 
 // FreeRTOS
 #include "FreeRTOS.h"
 #include "event_groups.h"
 
-
-
-
-
+// Utilities
+#include "qc_math.h"
+#include "workload.h"
+#include "fault.h"
+#include "busy_delay.h"
 
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                      Local Defines                                                 */
 /* ---------------------------------------------------------------------------------------------------*/
-#define SENSOR_MPU_INIT_TIMEOUT_MS                  ( 5 )
-#define SENSOR_READ_TIMEOUT_MS		                ( 1.1 )
-/** \brief  sensor eventBit*/
-#define event_SENSOR_BIT_COUNT                      ( 3 )
-#define event_SENSOR_RECEIVED                       ( 1 << 0 )
 
-#define CALIBRATE_MIN_TIME_MS                       ( 5000 ) //###5000
-#define CALIBRATE_BEFORE_FIRST_START                ( -2 )
-#define CALIBRATE_STOP                              ( -1 )
-#define CALIBRATE_START                             ( 0 )
-#define IS_CALIBRAE_REQUIRED(stateTime)             (stateTime>=0 || stateTime == -2)
+#define SENSOR_MPU_INIT_TIMEOUT_MS                  ( 5 )                               ///< Timeout for MPU init sequence [ms]
+#define SENSOR_READ_TIMEOUT_MS		                ( 1.1 )                             ///< Timeout for MPU data read sequence [ms]
+
+#define event_SENSOR_BIT_COUNT                      ( 3 )                               ///< Sensor event bits
+#define event_SENSOR_RECEIVED                       ( 1 << 0 )                          ///< Event bit for sensor MPU received
+
+#define CALIBRATE_MIN_TIME_MS                       ( 5000 )                            ///< Time for calibration [ms]
+#define CALIBRATE_BEFORE_FIRST_START                ( -2 )                              ///< Start up flag for calibration state machine
+#define CALIBRATE_STOP                              ( -1 )                              ///< Stop flag for calibration state machine
+#define CALIBRATE_START                             ( 0 )                               ///< Start flag for calibration state machine
+#define IS_CALIBRAE_REQUIRED(stateTime)             (stateTime>=0 || stateTime == -2)   ///< Macro to check if calibration is required
 
 #define dt 0.002f
 
 
 
 #if (setup_ALT_BARO)
-    #define SENSOR_BARO_INIT_TIMEOUT_MS             ( 3000 ) // TODO test but takes quit some time
-    // event bit for barometer
-    #define event_SENSOR_BARO_RECEIVED              ( 1 << 1 )
+    #define SENSOR_BARO_INIT_TIMEOUT_MS             ( 3000 )                            ///< Timeout for Barometer init sequence [ms]
+    #define event_SENSOR_BARO_RECEIVED              ( 1 << 1 )                          ///< Event bit for sensor barometer received
 
-
-    // defines for read timing barometer
-    #define SENSOR_BARO_MEASUREMENT                 ( 5 )   // every 5th loop read data
-    #define SENSOR_BARO_MEASUREMENT_TEMP            ( 20 )  // every 20th measurement read temp
-    #define SENSOR_BARO_READ_TEMP_REQ_PRESS         ( 6 )
-    #define SENSOR_BARO_READ_PRESS_REQ_TEMP         ( 7 )
-    #define SENSOR_BARO_READ_PRESS_REQ_PRESS        ( 8 )
+    // Defines for read timing barometer
+    #define SENSOR_BARO_MEASUREMENT                 ( 5 )                               ///< Every 5th loop read data (5 loops = 10ms)
+    #define SENSOR_BARO_MEASUREMENT_TEMP            ( 20 )                              ///< Every 20th measurement read temp
+    #define SENSOR_BARO_READ_TEMP_REQ_PRESS         ( 6 )                               ///< Macro for barometer control sequence
+    #define SENSOR_BARO_READ_PRESS_REQ_TEMP         ( 7 )                               ///< Macro for barometer control sequence
+    #define SENSOR_BARO_READ_PRESS_REQ_PRESS        ( 8 )                               ///< Macro for barometer control sequence
 
 
 #endif
 
 #if(setup_ALT_LIDAR)
-    #define SENSOR_LIDAR_INIT_TIMEOUT_MS            ( 5 )
-    // event bit for lidar
-    #define event_SENSOR_LIDAR_RECEIVED             (1 << 2)
+    #define SENSOR_LIDAR_INIT_TIMEOUT_MS            ( 5 )                               ///< Timeout for Lidar init sequence [ms]
+    #define event_SENSOR_LIDAR_RECEIVED             (1 << 2)                            ///< Event bit for sensor lidar received
 
-    #define SENSOR_LIDAR_MEASUREMENT                ( 2 )
+    #define SENSOR_LIDAR_MEASUREMENT                ( 2 )                               ///< Every 2th loop read lidar data (2 loops = 4ms)
 
 #endif
 
 
+///< Enum for postion of sensor values in array
 enum sensorAxis_e{
 
     X_ACC,
@@ -107,6 +109,7 @@ enum sensorAxis_e{
 
 };
 
+///< Enum for position of barometer sensor values in array
 enum sensorBaro_e{
 
     T_BARO,
@@ -123,63 +126,60 @@ enum sensorBaro_e{
 uint8_t blockTaskTillEventBitIsSet(uint32_t ui32_eventBits, uint32_t ui32_eventTimeout_Ms);
 
 
-#if ( setup_DEV_SUM_RECEIVS )
+#if ( setup_DEV_SUM_RECEIVS ) || DOXYGEN
     extern void HIDE_senMesRec_SetEventName(uint32_t ui32_eventBit,const char* pc_name);
     extern void HIDE_senMesRec_DrawDisplay(void);
     extern void HIDE_senMesRec_Increment(uint32_t ui32_receiveEventBit);
 #else
     #define HIDE_senMesRec_SetEventName(ui32_eventBit,pc_name)            // this define will be kicked off from the preprocessor
     #define HIDE_senMesRec_DrawDisplay                            0       // 0 pointer
-    #define HIDE_senMesRec_Increment(ui32_receiveEventBit)
+    #define HIDE_senMesRec_Increment(ui32_receiveEventBit)                // this define will be kicked off from the preprocessor
 #endif
 
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                      Global Variables                                              */
 /* ---------------------------------------------------------------------------------------------------*/
-volatile float gf_sensor_attitudeQuaternion[4] = {1.0, 0.0, 0.0, 0.0};
-volatile float gf_sensor_dotAttitudeQuaternion[4];
-float gf_sensor_fusedAngles[3];
-float gf_sensor_angularVelocity[3];
-float gf_sensor_gyroAngularVelocity[3] = {0.0, 0.0, 0.0};
-
-
-
-float gf_sensor_pressure; // TODO maybe later just altitude global
-float gf_sensor_baroAltitude;
-
-float gf_sensor_lidarAltitude;
+volatile float gf_sensor_attitudeQuaternion[4] = {1.0, 0.0, 0.0, 0.0};  ///< Global variable for attitude quaternion
+volatile float gf_sensor_dotAttitudeQuaternion[4];                      ///< Global variable for derivative of attitude quaternion
+float gf_sensor_fusedAngles[3];                                         ///< Global variable for fused Tait-Bryan angles [rad] (roll, pitch, yaw)
+float gf_sensor_angularVelocity[3];                                     ///< Global variable for angular velocity [rad/s] calculated from quaternions
+float gf_sensor_gyroAngularVelocity[3] = {0.0, 0.0, 0.0};               ///< Global variable for angular velocity [rad/s] directly from gyroscope
+float gf_sensor_pressure;                                               ///< Global variable for pressure [mPa] of barometer
+float gf_sensor_baroAltitude;                                           ///< Global variable for altitude [cm] measured by barometer
+float gf_sensor_lidarAltitude;                                          ///< Global variable for altitude [cm] measured by lidar
 
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                      Local Variables                                               */
 /* ---------------------------------------------------------------------------------------------------*/
-volatile EventGroupHandle_t gx_sensor_EventGroup;
-// variable to check i2c workload
-static workload_handle_p p_workHandle;
-// count received sensor measurements
-volatile countEdges_handle_p p_senMesRec_countEdges;
 
-static int32_t i32_stateTime = CALIBRATE_BEFORE_FIRST_START;
+volatile EventGroupHandle_t gx_sensor_EventGroup;                       ///< Event group handle for sensor receive events
+static workload_handle_p p_workHandle;                                  ///< Variable to check i2c workload
+volatile countEdges_handle_p p_senMesRec_countEdges;                    ///< Count received sensor measurements
+
+static int32_t i32_stateTime = CALIBRATE_BEFORE_FIRST_START;            ///< Variable for calibration state machine
 
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                      Procedure Definitions                                         */
 /* ---------------------------------------------------------------------------------------------------*/
 
-/**
-* \brief   send data of Sensor over USB to PC application
-*/
-#if ( setup_DEV_DEBUG_USB )
 
-    static float f_usb_debug[9];
-    static int16_t i16_usb_debug[9];
+#if ( setup_DEV_DEBUG_USB ) || DOXYGEN
 
+
+    /**
+    *   @brief   Send data from sensor driver to over USB to PC application
+    *
+    *   @note   This happens each 100ms !!!NOT USEABLE FOR FREQUENCY ANALYSIS OF SIGNALS!!!
+    */
     void HIDE_Sensor_SendDataOverUSB(void)
     {
-        //HIDE_Debug_USB_InterfaceSend(i16_usb_debug, sizeof(i16_usb_debug)/ sizeof(i16_usb_debug[0]), debug_INT16);
-//
-//        f_usb_debug[0] = gf_sensor_fusedAngles[0];
-//        f_usb_debug[1] = gf_sensor_fusedAngles[1];
-//        f_usb_debug[2] = gf_sensor_fusedAngles[2];
-
+        float f_usb_debug[9];
+        /*
+         * Array has to be filled with variables you wish to send
+         * f_usb_debug[0] = ...
+         * f_usb_debug[1] = ...
+         * ...
+         */
         HIDE_Debug_USB_InterfaceSend(f_usb_debug, sizeof(f_usb_debug)/ sizeof(f_usb_debug[0]), debug_FLOAT);
     }
 
@@ -187,8 +187,9 @@ static int32_t i32_stateTime = CALIBRATE_BEFORE_FIRST_START;
 
 #if ( setup_DEV_SUM_RECEIVS )
     /**
-     * \brief   Draw info about receive Counts on the Display
-     * \note    to enable this HIDE function set setup_DEV_SUM_RECEIVS in qc_setup.h
+     * @brief   Draw info about the sensor receive counter on the display
+     *
+     * @note    To enable this HIDE function set setup_DEV_SUM_RECEIVS in qc_setup.h
      */
     void HIDE_senMesRec_DrawDisplay(void)
     {
@@ -213,8 +214,7 @@ static int32_t i32_stateTime = CALIBRATE_BEFORE_FIRST_START;
     }
 
     /**
-     * \brief   store the name of the receive eventBit into p_receive_coundEdges
-     *
+     * @brief   Store the name of the receive eventBit into p_receive_coundEdges
      */
     void HIDE_senMesRec_SetEventName(uint32_t ui32_eventBit,const char* pc_name)
     {
@@ -222,19 +222,21 @@ static int32_t i32_stateTime = CALIBRATE_BEFORE_FIRST_START;
     }
 
     /**
-     * \brief   increment at ui32_receiveEventBit in p_receive_coundEdges
-     * \param   ui32_receiveEventBit    the receive eventBit (see receiver_task.h)
-     * \note    to enable this HIDE function set setup_DEV_SUM_RECEIVS in qc_setup.h
+     * @brief   Increment at ui32_receiveEventSensorBit in p_senMesRec_countEdges
+     *
+     * @param   ui32_receiveEventSensorBit  the received eventBit
+     *
+     * @note    To enable this HIDE function set setup_DEV_SUM_RECEIVS in qc_setup.h
      */
-    void HIDE_senMesRec_Increment(uint32_t ui32_receiveEventBit)
+    void HIDE_senMesRec_Increment(uint32_t ui32_receiveEventSensorBit)
     {
-        CountEdges_Increment(p_senMesRec_countEdges,CountEdges_Bit2Num(ui32_receiveEventBit));
+        CountEdges_Increment(p_senMesRec_countEdges,CountEdges_Bit2Num(ui32_receiveEventSensorBit));
     }
 
 #endif
 
 /**
- * \brief   Draw info about Sensor on the Display
+ * @brief   Draw info about Sensors on the Display
  */
 void Sensor_DrawDisplay(void)
 {
@@ -266,33 +268,40 @@ void Sensor_DrawDisplay(void)
 
     #if ( setup_ALT_BARO || setup_ALT_LIDAR )
 
-//
-//    u8g_DrawStr(&gs_display, 58, 32,"aB");
-//
-//    float alt_print;
-//    if(gf_sensor_baroAltitude <= 0){
-//
-//        alt_print = 0.0;
-//    }
-//    else
-//    {
-//        alt_print = gf_sensor_baroAltitude * 100;
-//    }
-//    u8g_DrawStr(&gs_display, 66, 32, u8g_u16toa((uint16_t)alt_print,4));
-//    u8g_DrawStr(&gs_display, 58, 44,"aL");
-//    u8g_DrawStr(&gs_display, 66, 44, u8g_u16toa((uint16_t)gf_sensor_lidarAltitude,4));
+
+    u8g_DrawStr(&gs_display, 58, 32,"aB");
+
+    float alt_print;
+    if(gf_sensor_baroAltitude <= 0){
+
+        alt_print = 0.0;
+    }
+    else
+    {
+        alt_print = gf_sensor_baroAltitude * 100;
+    }
+    u8g_DrawStr(&gs_display, 66, 32, u8g_u16toa((uint16_t)alt_print,4));
+    u8g_DrawStr(&gs_display, 58, 44,"aL");
+    u8g_DrawStr(&gs_display, 66, 44, u8g_u16toa((uint16_t)gf_sensor_lidarAltitude,4));
 
     #endif
 
 }
 
 /**
- * \brief   Blocks FreeRTOS Task and sets timeout faults and i2c faults
+ * @brief   Blocks FreeRTOS Task and sets timeout faults and i2c faults
+ *
+ * @param   ui32_eventBits Event bit/bits for which the task waits
+ * @param   ui32_eventTimeout_Ms Maximum block time [ms]
+ *
+ * @return 1 Timeout or error has happend
+ *         0 Event bit was received before timeout
  */
 uint8_t blockTaskTillEventBitIsSet(uint32_t ui32_eventBits, uint32_t ui32_eventTimeout_Ms)
 {
 
     volatile EventBits_t x_sensorEventBits;
+
     //  Wait for sensor received event
     xEventGroupClearBits(gx_sensor_EventGroup,
                          event_SENSOR_RECEIVED |
@@ -305,7 +314,7 @@ uint8_t blockTaskTillEventBitIsSet(uint32_t ui32_eventBits, uint32_t ui32_eventT
                                             pdTRUE,          // wait for all Bits
                                             ui32_eventTimeout_Ms / portTICK_PERIOD_MS ); // maximum wait time
 
-    // unblock because of timeout, or i2cError?
+    // Unblock because of timeout, or i2cError?
     uint8_t ui8_error= (ui32_eventBits & x_sensorEventBits) != ui32_eventBits;
 
     // set an error if a change from ui8_error from 0 to 1 occurs (rising edge)
@@ -349,34 +358,29 @@ uint8_t blockTaskTillEventBitIsSet(uint32_t ui32_eventBits, uint32_t ui32_eventT
     // i2c sensorlib
     #include "sensorlib/i2cm_drv.h"
 
-    // sensor register files
-    #include "mpu9265_registers.h"
-    #include "ak8963_registers.h"
+    // Sensor register files
+    #include "register_maps/mpu9265_registers.h"
+    #include "register_maps/ak8963_registers.h"
 
-    // sensor lib files
+    // Sensor lib files
     #include "sensor_mpu9265.h"
-
-
-
-
-
 
     /*------------------------------------------------------------------------------------------------*/
     /*                                     Local defines i2c Mode                                     */
     /* -----------------------------------------------------------------------------------------------*/
 
-    // define i2c addresses of sensors
-    #define I2C_MPU_ADRESS                      MPU9265_ADDRESS
-    #define I2C_AK_ADDRESS                      AK8963_ADDRESS
+    #define I2C_MPU_ADRESS                      MPU9265_ADDRESS             ///< I2C address of MPU
+    #define I2C_AK_ADDRESS                      AK8963_ADDRESS              ///< I2C address of magnetometer
 
 
 
+    ///< If Barometer of Lidar are selected in qc_setup defines for I2C2 get set
     #if ( setup_ALT_BARO || setup_ALT_LIDAR )
 
-        #include "ms5611_registers.h"
+        #include "register_maps/ms5611_registers.h"
         #include "sensor_ms5611.h"
 
-        #include "LidarLitev3HP_register.h"
+        #include "register_maps/LidarLitev3HP_register.h"
         #include "sensor_LidarLitev3HP.h"
 
         #define I2C_MS_ADDRESS                  MS5611_ADDRESS
@@ -392,7 +396,7 @@ uint8_t blockTaskTillEventBitIsSet(uint32_t ui32_eventBits, uint32_t ui32_eventT
         #define I2C_ALT_SDA_PIN                 GPIO_PIN_5
     #endif
 
-
+    ///< Set defines for I2C1 for commmunication with MPU
     #if ( periph_SENSOR_INT == INT_I2C1 )
         #define I2C_SYSCTL_PERIPH           SYSCTL_PERIPH_I2C1
         #define I2C_PERIPH_BASE             I2C1_BASE
@@ -413,7 +417,6 @@ uint8_t blockTaskTillEventBitIsSet(uint32_t ui32_eventBits, uint32_t ui32_eventT
     /* ------------------------------------------------------------------------------------------------*/
     /*                                      Forward Declarations i2c Mode                              */
     /* ------------------------------------------------------------------------------------------------*/
-
     static void SensorCalibrate(void);
 
     void Sensor_MPU9265Callback(void *pvCallbackData, uint_fast8_t ui8_i2cState);
@@ -442,12 +445,14 @@ uint8_t blockTaskTillEventBitIsSet(uint32_t ui32_eventBits, uint32_t ui32_eventT
     /*                                      Global Variables i2c Mode                                     */
     /* ---------------------------------------------------------------------------------------------------*/
 
+    // MPU and Motors share the same i2c bus and master instance
     #if(periph_SENSOR_INT==periph_MOTOR_INT)
         extern tI2CMInstance i2cMastInst_s;             // I2C master instance
     #else
         static tI2CMInstance i2cMastInst_s;             // I2C master instance
     #endif
 
+    // Ii2c master instance for barometer and lidar
     #if ( setup_ALT_BARO || setup_ALT_LIDAR )
         tI2CMInstance i2cAltMastInst_s;
     #endif
@@ -456,15 +461,15 @@ uint8_t blockTaskTillEventBitIsSet(uint32_t ui32_eventBits, uint32_t ui32_eventT
     /*                                      Local Variables i2c Mode                                      */
     /* ---------------------------------------------------------------------------------------------------*/
 
-    // flags for i2c transfer
+    // Flags for i2c transfer
     static volatile uint8_t ui8_i2cFinishedFlag = 0;
     static volatile uint8_t ui8_i2cErrorFlag = 0;
     static volatile uint8_t ui8_i2cDataReadFlag = 0;
 
 
     // variables for MPU sensor functions
-    MPU9265_s s_MPU9265Inst;
-    MPU9265_AK8963_rawData_s s_MPU9265_AK8963_rawData;
+    static MPU9265_s s_MPU9265Inst;
+    static MPU9265_AK8963_rawData_s s_MPU9265_AK8963_rawData;
     static uint8_t ui8_mpuInitFlag = 0;
 
 
@@ -528,7 +533,8 @@ uint8_t blockTaskTillEventBitIsSet(uint32_t ui32_eventBits, uint32_t ui32_eventT
 //        .a1 = -0.3580,
 //        .a2 = 0.1584,
 
-        // notch q 0.8 100 hz works a little bit better but slower response test if worth         .b0 = 0.5000,
+        // notch q 0.8 100 hz works a little bit better but slower response test if worth
+       .b0 = 0.5000,
        .b1 = -0.3090,
        .b2 = 0.5000,
 
@@ -569,17 +575,18 @@ uint8_t blockTaskTillEventBitIsSet(uint32_t ui32_eventBits, uint32_t ui32_eventT
     #if ( setup_ALT_BARO )
 
         // variables for Baro sensor functions
-        MS5611_s s_MS5611Inst;
-        MS5611_rawData_s s_MS5611_rawData;
+        static MS5611_s s_MS5611Inst;
+        static MS5611_rawData_s s_MS5611_rawData;
         static uint16_t ui16_MS5611CalVal[6];
         static uint8_t ui8_baroInitFlag = 0;
         static uint8_t ui8_MS5611LoopCounter = 0;
         static uint8_t ui8_MS5611MesCounter = 0;
         static uint8_t ui8_MS5611NewMesFlag = 0;
+        static float f_pressureReference = 101325.0;
     #endif
 
     #if ( setup_ALT_LIDAR )
-        LidarLitev3HP_s s_LidarLitev3HPInst;
+        static LidarLitev3HP_s s_LidarLitev3HPInst;
         static uint16_t ui16_lidarAltitude;
         static uint8_t ui8_lidarInitFlag = 0;
         static uint8_t ui8_lidarLoopCounter = 0;
@@ -593,8 +600,7 @@ uint8_t blockTaskTillEventBitIsSet(uint32_t ui32_eventBits, uint32_t ui32_eventT
     /* -----------------------------------------------------------------------------------------------*/
 
     /**
-     * \brief   ISR for I2C
-     *          Give the interrupt handle to the I2C Master instance
+     * @brief   ISR for I2C. Give the interrupt handle to the I2C Master instance.
      */
     void Sensor_I2CIntHandler(void)
     {
@@ -602,7 +608,7 @@ uint8_t blockTaskTillEventBitIsSet(uint32_t ui32_eventBits, uint32_t ui32_eventT
     }
 
     /**
-    * \brief   MPU9265 sensor callback function only set flag computation in other functions
+    * @brief   MPU9265 sensor callback function only set flag computation in other functions
     *
     */
     void Sensor_MPU9265Callback(void *pvCallbackData, uint_fast8_t ui8_i2cState)
@@ -628,8 +634,7 @@ uint8_t blockTaskTillEventBitIsSet(uint32_t ui32_eventBits, uint32_t ui32_eventT
 
 
     /**
-     * \brief   Convert raw int16 values from MPU to float values
-     *
+     * @brief   Convert raw int16 values from MPU to float values     *
      */
     static void MPUrawData2Float(float* pf_sensorData){
 
@@ -646,9 +651,9 @@ uint8_t blockTaskTillEventBitIsSet(uint32_t ui32_eventBits, uint32_t ui32_eventT
         pf_sensorData[Z_MAG] = (float) s_MPU9265_AK8963_rawData.i16_magZ;
 
     }
+
     /**
-     * \brief   Matches the MPU axes to the QC axes
-     *
+     * @brief   Matches the MPU axes to the QC axes
      */
     static void MPUAxis2QCAxis(float* pf_sensorData){
 
@@ -671,8 +676,7 @@ uint8_t blockTaskTillEventBitIsSet(uint32_t ui32_eventBits, uint32_t ui32_eventT
     }
 
     /**
-     * \brief   Convert raw MPU data to SI units
-     *
+     * @brief   Convert raw MPU data to SI units
      */
     static void convertMPUData(float* pf_sensorData){
 
@@ -710,8 +714,7 @@ uint8_t blockTaskTillEventBitIsSet(uint32_t ui32_eventBits, uint32_t ui32_eventT
 
 
     /**
-     * \brief   Correct the MPU offsets after calibration phase
-     *
+     * @brief   Correct the MPU offsets after calibration phase
      */
     static void correctMPUOffset(float* pf_sensorData,uint8_t calibrate){
 
@@ -765,7 +768,17 @@ uint8_t blockTaskTillEventBitIsSet(uint32_t ui32_eventBits, uint32_t ui32_eventT
         }
     }
 
-
+    /**
+    * @brief   Filter gyroscope data
+    *
+    * @details
+    *
+    * Procedure:
+    *
+    * 1. lowpass filter
+    * 2. First notch filter
+    * 3. Second notch filter
+    */
     static void filterGyroData(float *pf_sensorData)
     {
 
@@ -787,7 +800,7 @@ uint8_t blockTaskTillEventBitIsSet(uint32_t ui32_eventBits, uint32_t ui32_eventT
 
 
     /**
-    * \brief   calculate angulat velocity from tait-bryan angles
+    * @brief   Calculate angular velocity from attitude quaternion and copy gyro angular velocity
     */
     static void calculateAngularVelocity(volatile float *q, volatile float *qDot,  float *angularVelocity,
                                          float * pf_sensorData, float*gyroAngularVelocity)
@@ -836,8 +849,7 @@ uint8_t blockTaskTillEventBitIsSet(uint32_t ui32_eventBits, uint32_t ui32_eventT
     #if (setup_ALT_BARO || setup_ALT_LIDAR)
 
         /**
-          * \brief   ISR for I2C
-          *          Give the interrupt handle to the I2C Master instance
+          * @brief   ISR for I2C. Give the interrupt handle to the I2C Master instance.
           */
          void Sensor_Alt_I2CIntHandler(void)
          {
@@ -851,8 +863,7 @@ uint8_t blockTaskTillEventBitIsSet(uint32_t ui32_eventBits, uint32_t ui32_eventT
     #if (setup_ALT_BARO)
 
        /**
-       * \brief   MS5611 sensor callback function only set flag computation in other functions
-       *
+       * @brief   MS5611 sensor callback function only set flag computation in other functions
        */
        void Sensor_MS5611Callback(void *pvCallbackData, uint_fast8_t ui8_i2cState)
        {
@@ -877,7 +888,7 @@ uint8_t blockTaskTillEventBitIsSet(uint32_t ui32_eventBits, uint32_t ui32_eventT
 
 
         /**
-         * \brief   Calculate temp and pressure from raw sensor values after datasheet
+         * @brief   Calculate temp and pressure from raw sensor values after datasheet
          */
         static void calculatePressureAndTemp(MS5611_rawData_s *ps_rawData, float pf_sensorBaroData[2]){
 
@@ -921,9 +932,9 @@ uint8_t blockTaskTillEventBitIsSet(uint32_t ui32_eventBits, uint32_t ui32_eventT
         }
 
 
-        float f_pressureReference = 101325.0;
+
         /**
-        * \brief   Calculate altitude from temp and pressure values also after calibrate set
+        * @brief   Calculate altitude from temp and pressure values also after calibrate set
         *          pressure reference to zero
         */
         static float calculateAltitude(float pf_sensorBaroData[2] , uint8_t calibrate)
@@ -957,9 +968,8 @@ uint8_t blockTaskTillEventBitIsSet(uint32_t ui32_eventBits, uint32_t ui32_eventT
 
 
         /**
-          * \brief   LidarLitev3HP sensor callback function only set flag computation in other functions
-          *
-          */
+        *  @brief   LidarLitev3HP sensor callback function only set flag computation in other functions
+        */
         void Sensor_LidarLitev3HPCallback(void *pvCallbackData, uint_fast8_t ui8_i2cState)
         {
             // check if i2c was a success else save error
@@ -985,7 +995,9 @@ uint8_t blockTaskTillEventBitIsSet(uint32_t ui32_eventBits, uint32_t ui32_eventT
 
 
     /**
-     * \brief   Init the peripheral for the sensor driver
+     * @brief   Init the peripheral for the sensor driver
+     *
+     * @return  void
      */
     void Sensor_InitPeriph(void)
     {
@@ -1071,7 +1083,9 @@ uint8_t blockTaskTillEventBitIsSet(uint32_t ui32_eventBits, uint32_t ui32_eventT
     }
 
     /**
-     * \brief   Init through the peripheral the sensor chip itself
+     * @brief   Init through the peripheral the sensors
+     *
+     * @return  void
      */
     void Sensor_InitSensor(void)
     {
@@ -1109,7 +1123,7 @@ uint8_t blockTaskTillEventBitIsSet(uint32_t ui32_eventBits, uint32_t ui32_eventT
     }
 
     /**
-     * \brief   collect data to calibrate the sensor
+     * @brief   Collect data to calibrate the sensor
      */
     static void SensorCalibrate(void)
     {
@@ -1249,6 +1263,7 @@ uint8_t blockTaskTillEventBitIsSet(uint32_t ui32_eventBits, uint32_t ui32_eventT
     // Correct MPU data
     MPUAxis2QCAxis(pf_sensorData);
     convertMPUData(pf_sensorData);
+
     correctMPUOffset(pf_sensorData, 1);
 
     #if (setup_ALT_BARO)
@@ -1277,12 +1292,10 @@ uint8_t blockTaskTillEventBitIsSet(uint32_t ui32_eventBits, uint32_t ui32_eventT
 
 
     }
+    // TODO delete Later
+    static float f_usb_debug[9];
     /**
-     * \brief   read the sonsor and prepare data (sensor fusion).
-     *
-     *          fire eventBit fault_SENSOR if there is a fault,
-     *          else clear the bit.
-     * \note    Events: EventBit fault_SENSOR will be set or cleared in gx_fault_EventGroup
+     * @brief   Read the sensors and prepare data for control algorithm
      */
     void Sensor_ReadAndFusion(void)
     {
@@ -1420,36 +1433,17 @@ uint8_t blockTaskTillEventBitIsSet(uint32_t ui32_eventBits, uint32_t ui32_eventT
     // Correct MPU data
     MPUAxis2QCAxis(pf_sensorData);
     convertMPUData(pf_sensorData);
-//
-//    // TODO delete just for mag calibration
-//    f_usb_debug[0] = pf_sensorData[0];
-//    f_usb_debug[1] = pf_sensorData[1];
-//    f_usb_debug[2] = pf_sensorData[2];
-//    f_usb_debug[3] = pf_sensorData[3];
-//    f_usb_debug[4] = pf_sensorData[4];
-//    f_usb_debug[5] = pf_sensorData[5];
-//    f_usb_debug[6] = pf_sensorData[6];
-//    f_usb_debug[7] = pf_sensorData[7];
-//    f_usb_debug[8] = pf_sensorData[8];
-
-
     correctMPUOffset(pf_sensorData, 0);
 
-    filterGyroData(pf_sensorData);
 
-//    f_usb_debug[0] = pf_sensorData[0];
-//    f_usb_debug[1] = pf_sensorData[1];
-//    f_usb_debug[2] = pf_sensorData[2];
-//    f_usb_debug[3] = pf_sensorData[3];
-//    f_usb_debug[4] = pf_sensorData[4];
-//    f_usb_debug[5] = pf_sensorData[5];
-//    f_usb_debug[6] = pf_sensorData[6];
-//    f_usb_debug[7] = pf_sensorData[7];
-//    f_usb_debug[8] = pf_sensorData[8];
+
+
+    filterGyroData(&pf_sensorData[3]);
+
+
+
 //
-//
-//    HIDE_Debug_USB_InterfaceSend(f_usb_debug, sizeof(f_usb_debug)/ sizeof(f_usb_debug[0]), debug_FLOAT);
-//
+
 
     // Get attitude quaternion via sensor fusion from MPU data
     MadgwickAHRSupdate(pf_sensorData[X_ACC], pf_sensorData[Y_ACC], pf_sensorData[Z_ACC],
@@ -1460,6 +1454,9 @@ uint8_t blockTaskTillEventBitIsSet(uint32_t ui32_eventBits, uint32_t ui32_eventT
     // Get Euler/Tait-Bryan angles from quaternion
     Math_QuatToEuler(gf_sensor_attitudeQuaternion, gf_sensor_fusedAngles);
     //Math_QuatToEuler(gf_sensor_dotAttitudeQuaternion, gf_sensor_angularVelocity);
+
+
+
     calculateAngularVelocity(gf_sensor_attitudeQuaternion, gf_sensor_dotAttitudeQuaternion, gf_sensor_angularVelocity, pf_sensorData, gf_sensor_gyroAngularVelocity);
 
      #if (setup_ALT_BARO)
@@ -1476,6 +1473,8 @@ uint8_t blockTaskTillEventBitIsSet(uint32_t ui32_eventBits, uint32_t ui32_eventT
             calculatePressureAndTemp(&s_MS5611_rawData, pf_sensorBaroData);
             // in calibration mode altitude doesn't have to be saved
             gf_sensor_baroAltitude = calculateAltitude(pf_sensorBaroData, 0);
+
+
         }
 
 
@@ -1487,6 +1486,8 @@ uint8_t blockTaskTillEventBitIsSet(uint32_t ui32_eventBits, uint32_t ui32_eventT
             ui8_lidarNewMesFlag = 0;
             // copy the read buffer into global variables
             LidarLitev3HP_GetRawData(&s_LidarLitev3HPInst, &ui16_lidarAltitude, &gf_sensor_lidarAltitude);
+
+
         }
     #endif
 
@@ -1503,11 +1504,14 @@ uint8_t blockTaskTillEventBitIsSet(uint32_t ui32_eventBits, uint32_t ui32_eventT
 #endif
 
 /**
- * \brief   if calibration is required, start calibration.
+ * @brief   If calibration is required, start calibration.
  *
- *          calibrate for a minimum time of x ms.
- *          (x is defined in the driver)
- * \param   elapseTimeMS    elapsed time between last call
+ * @details
+ * Calibrate for a minimum time of x ms. (x is defined in the driver).
+ *
+ * @param   elapseTimeMS --> elapsed time between last call
+ *
+ * @return  void
  */
 void Sensor_Calibrate(int32_t elapseTimeMS)
 {
@@ -1522,7 +1526,9 @@ void Sensor_Calibrate(int32_t elapseTimeMS)
 }
 
 /**
- * \brief   stopts the requirement of the sensor to calibrate
+ * @brief   Stops the requirement of the sensor to calibrate
+ *
+ * @return  void
  */
 void Sensor_CalibrateStop(void)
 {
@@ -1531,10 +1537,12 @@ void Sensor_CalibrateStop(void)
 }
 
 /**
- * \brief   requires the sensor to start calibration
+ * @brief   Requires the sensor to start calibration
  *
- *          (this does not calibrate, only requires
- *          use Sensor_Calibrate to calibrate)
+ * @details
+ * This does not calibrate, only requires. Use Sensor_Calibrate to calibrate
+ *
+ * @return  void
  */
 void Sensor_CalibrateRequire(void)
 {
@@ -1543,9 +1551,10 @@ void Sensor_CalibrateRequire(void)
 }
 
 /**
- * \brief   get the state of the sensor calibration
- * \return  true if calibration is not running or ( calibration is running but long enough )
- *          false else
+ * @brief   Get the state of the sensor calibration
+ *
+ * @return  true --> If calibration is not running or ( calibration is running but long enough )\n
+ *          false --> Else
  */
 uint8_t Sensor_IsCalibrateReady(void)
 {
@@ -1557,9 +1566,10 @@ uint8_t Sensor_IsCalibrateReady(void)
 }
 
 /**
- * \brief   return true if calibration is required
- * \return  true  if calibration is required,
- *          false else
+ * @brief   Check if calibration is required
+ *
+ * @return  true --> If calibration is required\n
+ *          false --> else
  */
 uint8_t Sensor_IsCalibrateRequired(void)
 {

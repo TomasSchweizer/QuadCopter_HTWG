@@ -1,3 +1,10 @@
+/*!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!*/
+/* NOT USED AT THE MOMENT, THEREFORE EXCLUDED FROM BUILD. TO USE INCLUDE
+ * BACK INTO BUILD
+ */
+/*!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!*/
+
+
 /************************************************************************
  *
  *	port_expander.h		Interface Declarations for port_expander.c

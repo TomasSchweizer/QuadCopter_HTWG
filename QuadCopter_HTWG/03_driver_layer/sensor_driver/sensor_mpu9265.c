@@ -1,16 +1,25 @@
-//=====================================================================================================
-// @file sensor_mpu9265.h
-//=====================================================================================================
-//
-// @brief Implementation of a mpu9265 function library
-//
-// Date                 Author                      Notes
-// @date 06/12/2020     @author Tomas Schweizer     Overall changes to fit to application
-//
-// Source:
-// TivaWare SensorLib
-//
-//=====================================================================================================
+/*===================================================================================================*/
+/*  sensor_mpu9265.h                                                                                  */
+/*===================================================================================================*/
+
+/*
+*   file    sensor_mpu9265.h
+*
+*   brief  API for the mpu9265
+*
+*   details
+*
+*   <table>
+*   <tr><th>Date            <th>Author              <th>Notes
+*   <tr><td>06/12/2021      <td>Tomas Schweizer     <td>Implementation
+*   <tr><td>31/01/2021      <td>Tomas Schweizer     <td>Code clean up & Doxygen
+*   </table>
+*   \n
+*
+*   Sources:
+*   TivaWare SensorLib
+*/
+/*====================================================================================================*/
 
 /* ---------------------------------------------------------------------------------------------------*/
 /*                                     Include File Definitions                                       */
@@ -21,8 +30,8 @@
 #include "sensorlib/i2cm_drv.h"
 #include "busy_delay.h"
 
-#include "mpu9265_registers.h"
-#include "ak8963_registers.h"
+#include "register_maps/mpu9265_registers.h"
+#include "register_maps/ak8963_registers.h"
 
 #include "sensor_mpu9265.h"
 
@@ -83,7 +92,7 @@ static uint8_t AK8963_ReadData(AK8963_s *ps_ak_inst, tSensorCallback *fp_AK8963C
 /* ---------------------------------------------------------------------------------------------------*/
 
 /**
- * \brief   The callback function that is called when I2C transactions to/from the
+ * @brief   The callback function that is called when I2C transactions to/from the
  *          MPU9150 have completed. Implemented as state machine.
  */
 static void MPU9265Callback(void *p_MPU9265CallbackData, uint_fast8_t ui8_i2cState){
@@ -125,40 +134,19 @@ static void MPU9265Callback(void *p_MPU9265CallbackData, uint_fast8_t ui8_i2cSta
         // Status register was read, check if reset is done before proceeding.
         case MPU9265_STATE_INIT_RESET_WAIT:
         {
-            // TODO change text
-            // Check the value read back from status to determine if device
-            // is still in reset or if it is ready.  Reset state for this
-            // register is 0x01. Device may also respond with an address NACK during very early stages of the
-            // its internal reset.  Keep polling until we verify device is ready.
-//            if((ps_inst->pui8_MPU9265ReadBuffer[0] != 0x01) ||
-//                    (ui8_i2cState == I2CM_STATUS_ADDR_NACK))
-//            {
-//                // Device still in reset so begin polling this register.
-//                ps_inst->pui8_MPU9265WriteBuffer[0] = MPU9265_PWR_MGMT_1;
-//
-//                I2CMRead(ps_inst->ps_i2cMastInst, ps_inst->ui8_MPU9265Address,
-//                         ps_inst->pui8_MPU9265WriteBuffer, 1,
-//                         ps_inst->pui8_MPU9265ReadBuffer, 1, MPU9265Callback, ps_inst);
-//                // Stay in the state for polling effect
-//                ps_inst->ui8_MPU9265State = MPU9265_STATE_INIT_RESET_WAIT;
-//            }
-//            else
-//            {
+            BusyDelay_Ms(1);
 
+            // Device finished reset active PWR MODE 1
+            ps_inst->pui8_MPU9265WriteBuffer[0] = MPU9265_PWR_MGMT_1;
+            ps_inst->pui8_MPU9265WriteBuffer[1] = MPU9265_PWR_MGMT_1_INT_20MHZ_CLOCK;
+            I2CMWrite(ps_inst->ps_i2cMastInst, ps_inst->ui8_MPU9265Address,
+                      ps_inst->pui8_MPU9265WriteBuffer, 2,
+                      MPU9265Callback, ps_inst);
 
-                BusyDelay_Ms(1);
+            // Update state to show we are modifing user control and
+            // power management 1 regs.
+            ps_inst->ui8_MPU9265State = MPU9265_STATE_INIT_PWR_MGMT;
 
-                // Device finished reset active PWR MODE 1
-                ps_inst->pui8_MPU9265WriteBuffer[0] = MPU9265_PWR_MGMT_1;
-                ps_inst->pui8_MPU9265WriteBuffer[1] = MPU9265_PWR_MGMT_1_INT_20MHZ_CLOCK;
-                I2CMWrite(ps_inst->ps_i2cMastInst, ps_inst->ui8_MPU9265Address,
-                          ps_inst->pui8_MPU9265WriteBuffer, 2,
-                          MPU9265Callback, ps_inst);
-
-                // Update state to show we are modifing user control and
-                // power management 1 regs.
-                ps_inst->ui8_MPU9265State = MPU9265_STATE_INIT_PWR_MGMT;
-            //}
 
             break;
         }
@@ -286,7 +274,7 @@ static void MPU9265Callback(void *p_MPU9265CallbackData, uint_fast8_t ui8_i2cSta
 }
 
 /**
- * \brief   Initializes the MPU9265 struct and requests a reset
+ * @brief   Initializes the MPU9265 struct and requests a reset
  *
  */
 uint8_t MPU9265_Init(MPU9265_s *ps_inst, tI2CMInstance *ps_I2CMInst, uint8_t ui8_MPU9265Address,
@@ -322,7 +310,7 @@ uint8_t MPU9265_Init(MPU9265_s *ps_inst, tI2CMInstance *ps_I2CMInst, uint8_t ui8
 }
 
 /**
- * \brief   Starts the read of accelerometer and gyroscope data from the MPU9150 and the
+ * @brief   Starts the read of accelerometer and gyroscope data from the MPU9150 and the
  *          magnetometer data from the on-chip aK8975.
  */
 uint8_t MPU9265_ReadData(MPU9265_s *ps_inst, tSensorCallback *fp_MPU9265Callback, void *p_MPU9265CallbackData)
@@ -363,7 +351,7 @@ static AK8963_s* MPU9265GetAK8963Inst(MPU9265_s *ps_inst)
 }
 
 /**
- * \brief    The callback function that is called when I2C transations to/from the
+ * @brief    The callback function that is called when I2C transations to/from the
  *           AK8963 have completed.
  *
  */
@@ -422,7 +410,7 @@ static void AK8963Callback(void *p_AK8693CallbackData, uint_fast8_t ui8_i2cState
 }
 
 /**
- * \brief    Initializes the AK8963 driver and request a reset
+ * @brief    Initializes the AK8963 driver and request a reset
  *
  */
 uint8_t AK8963_Init(AK8963_s *ps_ak_inst, tI2CMInstance *ps_I2CMInst, uint8_t ui8_AK8963Address,
@@ -455,7 +443,7 @@ uint8_t AK8963_Init(AK8963_s *ps_ak_inst, tI2CMInstance *ps_I2CMInst, uint8_t ui
 
 }
 /**
- * \brief    Initializes a data read for the AK8963
+ * @brief    Initializes a data read for the AK8963
  *
  */
 uint8_t AK8963_ReadData(AK8963_s *ps_ak_inst, tSensorCallback *fp_AK8963Callback, void *p_AK8963CallbackData){
@@ -490,7 +478,7 @@ uint8_t AK8963_ReadData(AK8963_s *ps_ak_inst, tSensorCallback *fp_AK8963Callback
 }
 
 /**
- * \brief    Copies the data from the read buffer into a variable
+ * @brief    Copies the data from the read buffer into a variable
  *
  */
 void  MPU9265_AK8963_GetRawData(MPU9265_s *ps_inst, MPU9265_AK8963_rawData_s *s_rawData)
@@ -513,6 +501,6 @@ void  MPU9265_AK8963_GetRawData(MPU9265_s *ps_inst, MPU9265_AK8963_rawData_s *s_
 
 }
 
-//=====================================================================================================
-// End of file
-//=====================================================================================================
+/*====================================================================================================*/
+/* End of file                                                                                        */
+/*====================================================================================================*/

@@ -1,88 +1,104 @@
-/**
- * 		@file 	busy_delay.c
- * 		@brief	simple busy waiting delays
- *
- * 				implemented with a timer
- *//* 	@author Tobias Grimm
- * 		@date 	25.05.2016	(last modified)
- */
+/*===================================================================================================*/
+/*  busy_delay.c                                                                                     */
+/*===================================================================================================*/
 
-/* ------------------------------------------------------------ */
-/*				Include File Definitions						*/
-/* ------------------------------------------------------------ */
+/*
+*   file   busy_delay.c
+*
+*   brief  Simple busy waiting delays, implemented with timer
+*
+*   details
+*
+*   <table>
+*   <tr><th>Date            <th>Author              <th>Notes
+*   <tr><td>25/05/2016      <td>Tobias Grimm        <td>Implementation & last modifications through MAs
+*   <tr><td>31/01/2021      <td>Tomas Schweizer     <td>Code clean up & Doxygen
+*   </table>
+*   \n
+*
+*   Sources:
+*/
+/*====================================================================================================*/
 
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                     Include File Definitions                                       */
+/* ---------------------------------------------------------------------------------------------------*/
 
+// Standard libraries
 #include <stdint.h>
 #include <stdbool.h>
 
-//  Hardware Specific
+//  Hardware specific libraries
 #include "driverlib/timer.h"
 #include "inc/hw_memmap.h"
 #include "driverlib/rom.h"
 #include "driverlib/sysctl.h"
 
-// utils
+// Utilities
 #include "busy_delay.h"
 
-/* ------------------------------------------------------------ */
-/*				Local Defines									*/
-/* ------------------------------------------------------------ */
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                      Local Defines                                                 */
+/* ---------------------------------------------------------------------------------------------------*/
 
 #define TIMER_BASE				TIMER2_BASE			   // free running Timer 16 Bit 1us ticks
 #define TIMER_MODULE 			TIMER_A
 #define SYSCTL_PERIPH_TIMER		SYSCTL_PERIPH_TIMER2
 
-/* ------------------------------------------------------------ */
-/*				Local Type Definitions							*/
-/* ------------------------------------------------------------ */
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                      Local Type Definitions                                        */
+/* ---------------------------------------------------------------------------------------------------*/
 
-/* ------------------------------------------------------------ */
-/*				Forward Declarations							*/
-/* ------------------------------------------------------------ */
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                      Forward Declarations                                          */
+/* ---------------------------------------------------------------------------------------------------*/
 
 void BusyDelay_Init();
 void BusyDelay_Us(uint16_t ui16_us);
 void BusyDelay_Ms(uint32_t ui32_ms);
 
-/* ------------------------------------------------------------ */
-/*				Global Variables								*/
-/* ------------------------------------------------------------ */
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                      Global Variables                                              */
+/* ---------------------------------------------------------------------------------------------------*/
 
-/* ------------------------------------------------------------ */
-/*				Local Variables									*/
-/* ------------------------------------------------------------ */
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                      Local Variables                                               */
+/* ---------------------------------------------------------------------------------------------------*/
 
-/* ------------------------------------------------------------ */
-/*				Procedure Definitions							*/
-/* ------------------------------------------------------------ */
+/* ---------------------------------------------------------------------------------------------------*/
+/*                                      Procedure Definitions                                         */
+/* ---------------------------------------------------------------------------------------------------*/
 
 /**
- * \brief	Init needed peripheral for busy waiting delays
+ * @brief	Init needed peripheral for busy waiting delays
+ *
+ * @return  void
  */
 void BusyDelay_Init()
 {
-	// timer 1 aktivieren
+	// Enable Timer 2 peripheral
 	ROM_SysCtlPeripheralEnable(SYSCTL_PERIPH_TIMER);
-	// zuerst Timer disable
+
+	// Timer disable
 	ROM_TimerDisable(TIMER_BASE,TIMER_MODULE);
 
-	// timer 1A zählt hoch von 0xffff bis 0x000 und fängt von vorne an
+	// Configure Timer as periodic count down timer from 0xffff to 0
 	ROM_TimerConfigure(TIMER_BASE, TIMER_CFG_SPLIT_PAIR | TIMER_CFG_A_PERIODIC);
 
-	// von 0xffff  bis 0 zählen und dann von vorne
 	// prescaler 80 bei 80Mhz -> 1us
-	// prescaler 50 bei 50Mhz  -> 1us
 	ROM_TimerPrescaleSet(TIMER_BASE,TIMER_MODULE,80);
 
-	// timer starten
+	// Start timer
 	ROM_TimerEnable(TIMER_BASE, TIMER_MODULE);
 }
 
 
 /**
- * \brief	busy waiting us
+ * @brief	Wait busy for x us
  *
- * \param	ui16_us   delay value [us]
+ * @param	ui16_us --> delay value [us]
+ *
+ * @return  void
  */
 void BusyDelay_Us(uint16_t ui16_us)
 {
@@ -91,9 +107,11 @@ void BusyDelay_Us(uint16_t ui16_us)
 }
 
 /**
- * \brief	busy waiting for ms
+ * @brief   Wait busy for x ms
  *
- * \param	ui32_ms   delay value [ms]
+ * @param	ui32_ms --> delay value [ms]
+ *
+ * @return  void
  */
 void BusyDelay_Ms(uint32_t ui32_ms)
 {
@@ -101,3 +119,7 @@ void BusyDelay_Ms(uint32_t ui32_ms)
 	for(i=0;i<ui32_ms;++i)
 		BusyDelay_Us(1000);
 }
+
+/*====================================================================================================*/
+/* End of file                                                                                        */
+/*====================================================================================================*/
