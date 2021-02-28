@@ -3,6 +3,8 @@
 <!--Rational Software Architect Designer 9.5-->
 <?com.ibm.xtools.emf.core.signature <signature id="com.ibm.xtools.uml.msl.model" version="7.0.0"><feature description="" name="com.ibm.xtools.ruml.feature" url="" version="7.0.0"/></signature>?>
 <?com.ibm.xtools.emf.core.signature <signature id="com.ibm.xtools.mmi.ui.signatures.diagram" version="7.0.0"><feature description="" name="Rational Modeling Platform (com.ibm.xtools.rmp)" url="" version="7.0.0"/></signature>?>
+<uml:Model xmi:version="2.0" xmlns:xmi="http://www.omg.org/XMI" xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore" xmlns:uml="http://www.eclipse.org/uml2/3.0.0/UML" xmlns:umlnotation="http://www.ibm.com/xtools/1.5.3/Umlnotation" xmi:id="_LS-aQHH2EeutSLOJQc_rkQ" name="Blockdiagramm_PID">
+  <eAnnotations xmi:id="_LS-aQXH2EeutSLOJQc_rkQ" source="uml2.diagrams" references="_LS-aQnH2EeutSLOJQc_rkQ">
     <contents xmi:type="umlnotation:UMLDiagram" xmi:id="_LS-aQnH2EeutSLOJQc_rkQ" type="Freeform" name="Main"/>
   </eAnnotations>
   <eAnnotations xmi:id="_LS-aQ3H2EeutSLOJQc_rkQ" source="com.ibm.xtools.common.ui.reduction.editingCapabilities">
