@@ -69,7 +69,7 @@
 #define PITCH_MAX		    (15.0f*math_PI/180.0f)		    ///< Pitch max angle commands[-max...+max] [rad] (At the moment 15° ~ 0.262 rad)
 #define YAW_MAX			    (15.0f*math_PI/180.0f)		    ///< Yaw max rate commands [-max...+max] [rad/s] (At the moment 25°/s ~ 0.436 rad/s)
 #define THROTTLE_MAX	    (1.0f)							///< Throttle max command [-max...+max] [] (At the moment -1.0 -> 1.0)
-#define THROTTLE_RC_EXPO    (0.4f)                          ///< Value to make the throttle around 0.0 (hover point) less sensitive
+#define THROTTLE_RC_EXPO    (0.55f)                          ///< Value to make the throttle around 0.0 (hover point) less sensitive
 
 /// Number of Channles in the CPPM signal
 #define remote_CPPM_CHANNELS 		  ( 6 )
